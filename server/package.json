@@ -1,0 +1,21 @@
+{
+  "name": "onescreen-server",
+  "version": "1.0.0",
+  "description": "OneScreen merchant dashboard API — aggregates orders/payments/shipping from Shopify, Cashfree and iCarry",
+  "private": true,
+  "type": "commonjs",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "nodemon src/index.js",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
