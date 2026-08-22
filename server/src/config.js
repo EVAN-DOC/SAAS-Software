@@ -46,5 +46,13 @@ module.exports = {
     // to be configurable.
     username: process.env.ICARRY_API_USERNAME,
     apiKey: process.env.ICARRY_API_KEY,
+    // Required to actually book a shipment (a real, money-spending action) —
+    // find yours in iCarry's panel under My Account > My Addresses > Pick up
+    // address. Left unset on purpose by default; booking is refused with a
+    // clear error until you deliberately set this.
+    pickupAddressId: process.env.ICARRY_PICKUP_ADDRESS_ID,
+    // Required for courier-cost estimates too (iCarry's estimate API needs
+    // an origin pincode) — the pincode of that same pickup address.
+    originPincode: process.env.ICARRY_ORIGIN_PINCODE,
   },
 };

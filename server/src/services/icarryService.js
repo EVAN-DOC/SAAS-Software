@@ -137,6 +137,51 @@ async function checkPincode(pincode) {
   return post("/api_check_pincode", { pincode });
 }
 
+/**
+ * Get ESTIMATE Single Shipment — real courier options + cost for a parcel.
+ * Read-only, no side effects, safe to call freely (used to populate the
+ * "choose a courier" step before booking).
+ */
+async function getEstimate({ lengthCm, breadthCm, heightCm, weightGrams, originPincode, destinationPincode, shipmentType, shipmentValue, mode = "S" }) {
+  return post("/api_get_estimate", {
+    length: lengthCm,
+    breadth: breadthCm,
+    height: heightCm,
+    weight: weightGrams,
+    destination_pincode: destinationPincode,
+    origin_pincode: originPincode,
+    destination_country_code: "IN",
+    origin_country_code: "IN",
+    shipment_mode: mode,
+    shipment_type: shipmentType, // 'C' (COD) | 'P' (Prepaid)
+    shipment_value: shipmentValue,
+  });
+}
+
+/**
+ * Book SINGLE Shipment — REAL, consequential action: creates an actual
+ * shipment with a courier, schedules a pickup, and will incur real charges.
+ * Not reversible via a simple "undo" (cancelShipment exists but RTO
+ * freight may still apply once picked up). Requires a pickup_address_id
+ * from your iCarry account (Settings > My Addresses > Pick up address) —
+ * see config.icarry.pickupAddressId / ICARRY_PICKUP_ADDRESS_ID.
+ */
+async function bookShipment({ pickupAddressId, clientOrderId, courierId, consignee, parcel, mode = "surface" }) {
+  const path = mode === "air" ? "/api_add_shipment_air" : "/api_add_shipment_surface";
+  return post(path, {
+    pickup_address_id: pickupAddressId,
+    client_order_id: clientOrderId,
+    courier_id: courierId,
+    consignee,
+    parcel,
+  });
+}
+
+/** PRINT Shipment Label — read-only, retrieves the label for an already-booked shipment. */
+async function printShipmentLabel(shipmentId, paperSize) {
+  return post("/api_print_shipment_label", { shipment_id: shipmentId, paper_size: paperSize });
+}
+
 // Numeric codes from SYNC Shipment STATUS's documented status table.
 const NUMERIC_STATUS = {
   1: "Pending Pickup",
@@ -176,5 +221,8 @@ module.exports = {
   syncShipmentStatuses,
   syncShipmentCharges,
   checkPincode,
+  getEstimate,
+  bookShipment,
+  printShipmentLabel,
   mapTrackingStatus,
 };
