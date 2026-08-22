@@ -6,6 +6,8 @@ const { mapOrder } = require("./mapOrder");
 const shopifyService = require("../services/shopifyService");
 const cashfreeService = require("../services/cashfreeService");
 const icarryService = require("../services/icarryService");
+const icarryShipmentMap = require("../lib/icarryShipmentMap");
+const icarryNdrStore = require("../lib/icarryNdrStore");
 const { mockOrders } = require("../mock/mockOrders");
 
 async function fetchLiveOrders() {
@@ -14,43 +16,74 @@ async function fetchLiveOrders() {
   return pMap(
     shopifyOrders,
     async (shopifyOrder) => {
-      // Joined on Shopify order name — make sure this is the reference/order_id
-      // you pass to Cashfree and iCarry when the order is placed/fulfilled.
-      const key = shopifyOrder.name;
+      // Cashfree is found via the order's transaction record — see
+      // shopifyService.findCashfreePayment() for why this store has two
+      // different shapes depending on prepaid vs partial-COD.
+      //
+      // iCarry tracking needs their own shipment_id, which isn't derivable
+      // from Shopify data directly — resolved via a local mapping file built
+      // by scripts/importIcarryShipments.js from an iCarry shipments export.
+      // Orders not in that mapping (not yet exported, or genuinely not
+      // shipped through iCarry) just show as not-yet-tracked.
+      const icarryShipmentId = icarryShipmentMap.getShipmentId(shopifyOrder.name);
+      let icarryTracking = null;
+      if (icarryShipmentId) {
+        try {
+          const result = await icarryService.trackShipment(icarryShipmentId);
+          icarryTracking = result?.success ? result : null;
+        } catch {
+          icarryTracking = null;
+        }
+      }
+      // NDR isn't part of the TRACK response's status vocabulary — it's a
+      // separate signal pushed by iCarry's NDR webhook (see
+      // routes/icarryWebhooks.js), layered on top of whatever the shipment's
+      // last known status was.
+      const icarryNdr = icarryShipmentId ? icarryNdrStore.getNdr(icarryShipmentId) : null;
+      const icarryRemit = null;
 
-      const [cashfreeResult, icarryResult] = await Promise.allSettled([
-        cashfreeService.fetchPaymentsForOrder(key),
-        icarryService.trackShipment(key),
-      ]);
+      let cfPayment = null;
+      try {
+        cfPayment = await shopifyService.findCashfreePayment(shopifyOrder.id);
+      } catch {
+        cfPayment = null;
+      }
 
-      const cashfreePayment =
-        cashfreeResult.status === "fulfilled" ? cashfreeResult.value?.[0] : null;
+      let cashfreePayment = null;
+      if (cfPayment?.orderId) {
+        try {
+          const payments = await cashfreeService.fetchPaymentsForOrder(cfPayment.orderId);
+          cashfreePayment = payments?.[0] || null;
+        } catch {
+          cashfreePayment = null;
+        }
+      }
 
       let cashfreeSettlement = null;
       if (cashfreePayment) {
         try {
-          const settlements = await cashfreeService.fetchSettlementsForOrder(key);
-          cashfreeSettlement = settlements?.[0] || null;
+          const settlements = await cashfreeService.fetchSettlementsForOrder(cfPayment.orderId);
+          // Cashfree returns a single settlement object per order for this
+          // account (confirmed against a live order), not an array — but
+          // tolerate an array shape too in case that varies by account/version.
+          cashfreeSettlement = Array.isArray(settlements) ? settlements[0] || null : settlements || null;
         } catch {
           cashfreeSettlement = null;
         }
+      } else if (cfPayment && !cfPayment.orderId) {
+        // Partial-COD advance path: no Cashfree order_id to query, but
+        // Shopify already confirmed the capture succeeded — surface that
+        // instead of showing nothing. No independent settlement proof (no
+        // UTR) is available for this path, so cashfreeSettlement stays null.
+        cashfreePayment = { order_amount: cfPayment.amount, payment_status: "SUCCESS", cf_payment_id: cfPayment.cfPaymentId };
       }
 
-      const icarryTracking = icarryResult.status === "fulfilled" ? icarryResult.value : null;
-
-      let icarryRemit = null;
-      if (icarryTracking) {
-        try {
-          const remit = await icarryService.fetchRemittances({});
-          icarryRemit = (remit?.items || []).find((r) => r.reference === key) || null;
-        } catch {
-          icarryRemit = null;
-        }
-      }
-
-      return mapOrder({ shopifyOrder, cashfreePayment, cashfreeSettlement, icarryTracking, icarryRemit });
+      return mapOrder({ shopifyOrder, cashfreePayment, cashfreeSettlement, icarryTracking, icarryRemit, icarryNdr });
     },
-    5
+    // Kept low because each order does a Shopify transactions.json lookup,
+    // and standard Shopify apps are rate-limited to 2 req/s (see the 429
+    // retry handling in shopifyService.js's client()).
+    2
   );
 }
 

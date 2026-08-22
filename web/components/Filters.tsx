@@ -1,3 +1,5 @@
+import { DATE_RANGES, DateRangeKey } from "@/lib/dateRange";
+
 export type FilterKey = "all" | "prepaid" | "cod" | "partial" | "alerts" | "confirmed";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
@@ -14,10 +16,12 @@ interface Props {
   onChange: (key: FilterKey) => void;
   search: string;
   onSearch: (value: string) => void;
+  dateRange: DateRangeKey;
+  onDateRangeChange: (value: DateRangeKey) => void;
   resultCount: string;
 }
 
-export default function Filters({ active, onChange, search, onSearch, resultCount }: Props) {
+export default function Filters({ active, onChange, search, onSearch, dateRange, onDateRangeChange, resultCount }: Props) {
   return (
     <>
       <div className="filters">
@@ -32,12 +36,26 @@ export default function Filters({ active, onChange, search, onSearch, resultCoun
             </div>
           ))}
         </div>
-        <input
-          className="search-box"
-          placeholder="Search order / customer / city…"
-          value={search}
-          onChange={(e) => onSearch(e.target.value)}
-        />
+        <div style={{ display: "flex", gap: 10 }}>
+          <select
+            className="search-box"
+            style={{ width: 150, cursor: "pointer" }}
+            value={dateRange}
+            onChange={(e) => onDateRangeChange(e.target.value as DateRangeKey)}
+          >
+            {DATE_RANGES.map((r) => (
+              <option key={r.key} value={r.key}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+          <input
+            className="search-box"
+            placeholder="Search order / customer / city…"
+            value={search}
+            onChange={(e) => onSearch(e.target.value)}
+          />
+        </div>
       </div>
       <div className="legend" style={{ marginBottom: 12 }}>
         <span>

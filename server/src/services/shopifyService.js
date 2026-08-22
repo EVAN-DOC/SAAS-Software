@@ -12,7 +12,7 @@ function client() {
       "Shopify is not configured — set SHOPIFY_ACCESS_TOKEN, or visit /auth/shopify to install the app and obtain one, or set MOCK_MODE=true"
     );
   }
-  return axios.create({
+  const instance = axios.create({
     baseURL: `https://${shopDomain}/admin/api/${apiVersion}`,
     headers: {
       "X-Shopify-Access-Token": accessToken,
@@ -20,6 +20,21 @@ function client() {
     },
     timeout: 15000,
   });
+
+  // Standard Shopify apps are capped at 2 req/s. Fetching per-order
+  // transactions for hundreds of orders blows through that quickly — retry
+  // 429s honoring Retry-After instead of letting the whole batch fail.
+  instance.interceptors.response.use(undefined, async (error) => {
+    const cfg = error.config;
+    if (error.response?.status !== 429 || !cfg) throw error;
+    cfg._retryCount = (cfg._retryCount || 0) + 1;
+    if (cfg._retryCount > 5) throw error;
+    const retryAfterSec = Number(error.response.headers["retry-after"]) || 1;
+    await new Promise((resolve) => setTimeout(resolve, retryAfterSec * 1000));
+    return instance(cfg);
+  });
+
+  return instance;
 }
 
 /**
@@ -56,6 +71,46 @@ async function fetchRecentOrders(days) {
   return orders;
 }
 
+/**
+ * Transactions carry the payment gateway's own reference for an order.
+ * https://shopify.dev/docs/api/admin-rest/latest/resources/transaction
+ */
+async function fetchOrderTransactions(shopifyOrderId) {
+  const http = client();
+  const res = await http.get(`/orders/${shopifyOrderId}/transactions.json`);
+  return res.data.transactions;
+}
+
+/**
+ * Finds the successful Cashfree transaction for a Shopify order (if any) and
+ * returns what we can resolve from it. Confirmed against this store's live
+ * data that there are two different shapes:
+ *  - Full-prepaid orders: gateway is the full descriptive app name
+ *    ("1Cashfree Payments(...)"), and `payment_id` IS Cashfree's real
+ *    order_id — usable with Cashfree's Orders API directly.
+ *  - Partial-COD advance captures: gateway is just "Cashfree", `payment_id`
+ *    is a Shopify-generated label ("#1626.2", not a Cashfree order_id), and
+ *    `receipt.payment_id` is Cashfree's cf_payment_id — a different ID space
+ *    that Cashfree's Orders API can't be queried by directly. In that case
+ *    we can't fetch independent settlement proof, but Shopify itself already
+ *    confirms the capture succeeded, so we surface that instead of nothing.
+ */
+async function findCashfreePayment(shopifyOrderId) {
+  const transactions = await fetchOrderTransactions(shopifyOrderId);
+  const tx = transactions.find(
+    (t) => t.status === "success" && (t.kind === "sale" || t.kind === "capture") && /cashfree/i.test(t.gateway || "")
+  );
+  if (!tx) return null;
+
+  const rawRef = tx.payment_id;
+  const looksLikeShopifyLabel = !rawRef || /^#/.test(rawRef);
+  return {
+    orderId: looksLikeShopifyLabel ? null : rawRef,
+    amount: Number(tx.amount),
+    cfPaymentId: tx.receipt?.payment_id || null,
+  };
+}
+
 function parseNextLink(linkHeader) {
   if (!linkHeader) return null;
   const match = linkHeader
@@ -69,4 +124,4 @@ function parseNextLink(linkHeader) {
   return { limit: 250, page_info: pageInfo };
 }
 
-module.exports = { fetchRecentOrders };
+module.exports = { fetchRecentOrders, fetchOrderTransactions, findCashfreePayment };

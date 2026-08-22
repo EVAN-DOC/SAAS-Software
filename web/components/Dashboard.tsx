@@ -7,6 +7,7 @@ import Filters, { FilterKey } from "./Filters";
 import OrderList from "./OrderList";
 import { Order } from "@/lib/types";
 import { computeKpis } from "@/lib/format";
+import { DateRangeKey, isWithinDateRange } from "@/lib/dateRange";
 
 const PAGE_SIZE = 25;
 
@@ -20,11 +21,17 @@ export default function Dashboard({ initialOrders, mock, loadError }: Props) {
   const [orders] = useState(initialOrders);
   const [active, setActive] = useState<FilterKey>("all");
   const [search, setSearch] = useState("");
+  const [dateRange, setDateRange] = useState<DateRangeKey>("all");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  // Date range scopes the whole page (list + KPI summary), matching how a
+  // "reporting period" filter reads on a dashboard. Type chips and search
+  // only narrow the list itself.
+  const dateFiltered = useMemo(() => orders.filter((o) => isWithinDateRange(o.date, dateRange)), [orders, dateRange]);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return orders.filter((o) => {
+    return dateFiltered.filter((o) => {
       let passFilter: boolean;
       switch (active) {
         case "all":
@@ -52,9 +59,9 @@ export default function Dashboard({ initialOrders, mock, loadError }: Props) {
         o.loc.toLowerCase().includes(term)
       );
     });
-  }, [orders, active, search]);
+  }, [dateFiltered, active, search]);
 
-  const kpis = useMemo(() => computeKpis(orders), [orders]);
+  const kpis = useMemo(() => computeKpis(dateFiltered), [dateFiltered]);
   const visible = filtered.slice(0, visibleCount);
 
   function handleFilterChange(key: FilterKey) {
@@ -64,6 +71,11 @@ export default function Dashboard({ initialOrders, mock, loadError }: Props) {
 
   function handleSearch(value: string) {
     setSearch(value);
+    setVisibleCount(PAGE_SIZE);
+  }
+
+  function handleDateRangeChange(value: DateRangeKey) {
+    setDateRange(value);
     setVisibleCount(PAGE_SIZE);
   }
 
@@ -95,6 +107,8 @@ export default function Dashboard({ initialOrders, mock, loadError }: Props) {
           onChange={handleFilterChange}
           search={search}
           onSearch={handleSearch}
+          dateRange={dateRange}
+          onDateRangeChange={handleDateRangeChange}
           resultCount={`${Math.min(visibleCount, filtered.length)} / ${filtered.length} orders`}
         />
 

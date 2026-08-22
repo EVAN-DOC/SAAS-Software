@@ -41,7 +41,9 @@ module.exports = {
   },
 
   icarry: {
-    baseUrl: process.env.ICARRY_BASE_URL || "https://ship.icarry.in/api",
+    // Base URL is fixed (https://www.icarry.in, hardcoded in icarryService.js)
+    // per iCarry's official API Document v17.0 — no longer a guess needing
+    // to be configurable.
     username: process.env.ICARRY_API_USERNAME,
     apiKey: process.env.ICARRY_API_KEY,
   },

@@ -2,86 +2,179 @@ const axios = require("axios");
 const config = require("../config");
 
 /**
- * iCarry (icarry.in) does not publish a public API reference — access is
- * granted per-merchant via their panel (Settings > API) or by emailing
- * support, and the exact paths/payloads vary by the plan you're on.
+ * Implements iCarry.in API Document v17.0 (obtained directly from iCarry,
+ * https://www.icarry.in/icarry-api.pdf). Base URL and auth flow below are
+ * verified against that document — not guessed.
  *
- * The endpoints below follow the shape iCarry describes on their API
- * plugins page (Book Shipment, Track a Shipment, Sync Shipment Status) but
- * are NOT verified against a live account. Before going live:
- *   1. Pull the real request/response contract from your iCarry dashboard
- *      or their support team.
- *   2. Update ICARRY_BASE_URL and the paths/auth below to match.
- *   3. Adjust mapTrackingStatus() so their status strings map to this
- *      dashboard's shipCat buckets.
+ * Auth: POST username+key to /api_login, get back an api_token valid for 60
+ * minutes. That token is then appended as `&api_token=<token>` directly onto
+ * every subsequent endpoint URL (yes, literally `&` with no leading `?` —
+ * that's what iCarry's own docs show, so it's reproduced as-is here rather
+ * than "corrected").
  *
- * Auth: this account was issued an API Username + API Key (no secret/
- * signature). iCarry doesn't document how those two are sent, so this
- * client sends them as `username` / `api_key` query params on every
- * request — the most common pattern for this class of Indian courier
- * aggregator API. If iCarry's actual docs say otherwise (e.g. they belong
- * in the JSON body, or as headers), move the two lines in withAuth() below
- * accordingly — everything else in this file stays the same.
+ * KNOWN GAP: TRACK / SYNC STATUS / SYNC CHARGES all require iCarry's own
+ * `shipment_id` — there is no documented endpoint to look that up from a
+ * Shopify order number or AWB. For this store, iCarry's own Shopify
+ * connector doesn't write tracking info back onto Shopify fulfillments
+ * either (checked directly — fulfillments have no tracking_company/url), so
+ * there's currently no automated way to resolve shipment_id for orders
+ * synced via that connector. Two ways to close this:
+ *   1. Register the "Webhook URL to get Shipment Status" (Account >
+ *      Integrations > API Credentials in iCarry's panel) pointing at this
+ *      server's /webhooks/icarry/status once it has a public URL — iCarry
+ *      pushes {shipment_id, awb, client_order_id, status} on every change,
+ *      which lets this app build its own shipment_id lookup over time.
+ *   2. For historical backfill, check iCarry's panel (My Account -> My
+ *      Shipments) for a CSV/export option covering shipment_id + AWB +
+ *      client order reference, and import it once.
  */
 
-function client() {
-  const { baseUrl, username, apiKey } = config.icarry;
-  if (!username || !apiKey) {
-    throw new Error(
-      "iCarry is not configured — set ICARRY_API_USERNAME and ICARRY_API_KEY, or set MOCK_MODE=true"
-    );
-  }
-  return axios.create({
-    baseURL: baseUrl,
-    headers: { "Content-Type": "application/json" },
-    timeout: 15000,
-  });
+const BASE_URL = "https://www.icarry.in";
+const TOKEN_TTL_MS = 55 * 60 * 1000; // docs say 60 min; refresh a little early
+
+let cachedToken = null;
+let tokenExpiresAt = 0;
+
+function http() {
+  return axios.create({ baseURL: BASE_URL, timeout: 15000 });
 }
 
-/** Merges the iCarry username/api_key into a request's query params. */
-function withAuth(params = {}) {
+// This is an OpenCart-based PHP backend — it reads $_POST, which needs a
+// form-encoded body, not a JSON one (confirmed live: JSON bodies silently
+// failed to deliver field values server-side, e.g. every shipment_id came
+// back "not found" including ones taken straight from iCarry's own export).
+function toFormBody(obj, prefix = "") {
+  const params = new URLSearchParams();
+  const add = (key, value) => {
+    if (value === undefined || value === null) return;
+    if (Array.isArray(value)) {
+      value.forEach((v, i) => add(`${key}[${i}]`, v));
+    } else if (typeof value === "object") {
+      Object.entries(value).forEach(([k, v]) => add(`${key}[${k}]`, v));
+    } else {
+      params.append(key, value);
+    }
+  };
+  Object.entries(obj).forEach(([k, v]) => add(prefix ? `${prefix}[${k}]` : k, v));
+  return params;
+}
+
+async function login() {
   const { username, apiKey } = config.icarry;
-  return { username, api_key: apiKey, ...params };
+  if (!username || !apiKey) {
+    throw new Error("iCarry is not configured — set ICARRY_API_USERNAME and ICARRY_API_KEY, or set MOCK_MODE=true");
+  }
+  const res = await http().post("/api_login", toFormBody({ username, key: apiKey }));
+  if (!res.data?.api_token) {
+    throw new Error(`iCarry login failed: ${JSON.stringify(res.data?.error || res.data)}`);
+  }
+  cachedToken = res.data.api_token;
+  tokenExpiresAt = Date.now() + TOKEN_TTL_MS;
+  return cachedToken;
 }
 
-/** Track a single shipment by AWB / order reference. TODO: confirm path with iCarry. */
-async function trackShipment(referenceOrAwb) {
-  const http = client();
-  const res = await http.get("/v1/track", { params: withAuth({ reference: referenceOrAwb }) });
-  return res.data;
+async function getToken() {
+  if (cachedToken && Date.now() < tokenExpiresAt) return cachedToken;
+  return login();
 }
 
-/** Bulk status sync for shipments updated since a given time. TODO: confirm path with iCarry. */
-async function syncShipmentStatuses(sinceIso) {
-  const http = client();
-  const res = await http.get("/v1/shipments/sync", { params: withAuth({ updated_since: sinceIso }) });
-  return res.data;
+/** iCarry's docs literally show `&api_token=` with no `?` — reproduced as-is. */
+// iCarry's server sometimes leaks a PHP notice/warning into the response
+// body ahead of the actual JSON (confirmed live — a bug on their end, not
+// worth working around any way other than parsing past it). Extract the
+// last {...} in the string if the body isn't already valid JSON.
+function parseIcarryResponse(data) {
+  if (typeof data !== "string") return data;
+  try {
+    return JSON.parse(data);
+  } catch {
+    const match = data.match(/\{[\s\S]*\}\s*$/);
+    if (match) {
+      try {
+        return JSON.parse(match[0]);
+      } catch {
+        // fall through
+      }
+    }
+    return { error: data };
+  }
 }
+
+async function post(path, body) {
+  const token = await getToken();
+  const formBody = toFormBody(body);
+  try {
+    const res = await http().post(`${path}&api_token=${token}`, formBody);
+    return parseIcarryResponse(res.data);
+  } catch (err) {
+    // Token may have been invalidated server-side before our TTL guess; retry once with a fresh one.
+    if (err.response?.status === 401 || err.response?.data?.error?.key) {
+      cachedToken = null;
+      const freshToken = await getToken();
+      const res = await http().post(`${path}&api_token=${freshToken}`, formBody);
+      return parseIcarryResponse(res.data);
+    }
+    throw err;
+  }
+}
+
+/** TRACK a Shipment — requires iCarry's own shipment_id (see module doc comment for the current gap). */
+async function trackShipment(shipmentId) {
+  return post("/api_track_shipment", { shipment_id: shipmentId });
+}
+
+/** SYNC Shipment STATUS for multiple shipments at once — cheaper than tracking one by one. */
+async function syncShipmentStatuses(shipmentIds) {
+  return post("/api_shipment_status_sync", { shipment_ids: shipmentIds });
+}
+
+/** SYNC Shipment CHARGES — actual billed freight cost per shipment (field is called `miles` in iCarry's response despite being a currency amount). */
+async function syncShipmentCharges(shipmentIds) {
+  return post("/api_shipment_billing_sync", { shipment_ids: shipmentIds });
+}
+
+async function checkPincode(pincode) {
+  return post("/api_check_pincode", { pincode });
+}
+
+// Numeric codes from SYNC Shipment STATUS's documented status table.
+const NUMERIC_STATUS = {
+  1: "Pending Pickup",
+  2: "Processing",
+  3: "Shipped",
+  7: "Canceled",
+  12: "Damaged",
+  14: "Lost",
+  16: "Voided",
+  21: "Delivered",
+  22: "In Transit",
+  23: "Returned to Origin",
+  24: "Manifested",
+  25: "Pickup Scheduled",
+  26: "Out For Delivery",
+  27: "Pending Return",
+};
 
 /**
- * COD remittance / wallet ledger — needed for the RTO freight deduction and
- * COD remittance batch numbers shown in the dashboard's money breakdown.
- * TODO: confirm path/fields with iCarry; this is a best guess at the shape.
+ * Normalizes iCarry's status (numeric code from SYNC, or string from TRACK)
+ * into the dashboard's shipCat buckets: delivered | transit | rto | ndr |
+ * unful | cancelled.
  */
-async function fetchRemittances({ startDate, endDate } = {}) {
-  const http = client();
-  const res = await http.get("/v1/remittances", { params: withAuth({ start_date: startDate, end_date: endDate }) });
-  return res.data;
-}
-
-/**
- * Normalizes iCarry's raw status string into the dashboard's shipCat buckets:
- * delivered | transit | rto | ndr | unful | cancelled.
- * Adjust the string matches once you see real values from iCarry's payload.
- */
-function mapTrackingStatus(rawStatus = "") {
-  const s = rawStatus.toLowerCase();
+function mapTrackingStatus(rawStatus) {
+  const s = String(NUMERIC_STATUS[rawStatus] ?? rawStatus ?? "").toLowerCase();
   if (s.includes("delivered")) return "delivered";
-  if (s.includes("rto") || s.includes("return")) return "rto";
-  if (s.includes("ndr") || s.includes("undelivered") || s.includes("failed attempt")) return "ndr";
-  if (s.includes("cancel")) return "cancelled";
+  if (s.includes("returned to origin") || s.includes("pending return")) return "rto";
+  if (s.includes("cancel") || s === "voided") return "cancelled";
+  if (s.includes("lost") || s.includes("damaged")) return "rto";
   if (s.includes("transit") || s.includes("shipped") || s.includes("out for delivery")) return "transit";
+  if (s.includes("pending pickup") || s.includes("processing") || s.includes("manifested") || s.includes("pickup scheduled")) return "unful";
   return "unful";
 }
 
-module.exports = { trackShipment, syncShipmentStatuses, fetchRemittances, mapTrackingStatus };
+module.exports = {
+  trackShipment,
+  syncShipmentStatuses,
+  syncShipmentCharges,
+  checkPincode,
+  mapTrackingStatus,
+};

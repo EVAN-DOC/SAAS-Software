@@ -13,23 +13,33 @@ const SHIP_LABELS = {
 /**
  * Determines prepaid / cod / partial from a Shopify order.
  *
- * Shopify has no native "partial COD" order type — Indian D2C stores that
- * take a prepaid advance + COD balance usually implement it with a checkout
- * app that tags the order (e.g. "partial-cod") and stores the advance amount
- * in note_attributes or a metafield. Adjust TAG / the note_attributes key
- * below to match whatever partial-COD app this store actually uses.
+ * Confirmed against this store's live data: its checkout (Fastrr) marks a
+ * partial-COD order using Shopify's own native `financial_status:
+ * "partially_paid"` — the advance is captured via Cashfree, the balance is
+ * left as COD. Falls back to a tag/note_attributes check for stores using a
+ * different partial-COD app that doesn't set that native status.
  */
 function classifyOrderType(shopifyOrder) {
+  if (shopifyOrder.financial_status === "partially_paid") return "partial";
+
   const tags = (shopifyOrder.tags || "").toLowerCase();
   const advanceAttr = (shopifyOrder.note_attributes || []).find((a) =>
     /advance[_-]?amount/i.test(a.name)
   );
-
   if (tags.includes("partial-cod") || tags.includes("partial_cod") || advanceAttr) {
     return "partial";
   }
   if (shopifyOrder.financial_status === "paid") return "prepaid";
   return "cod";
+}
+
+/** Builds a human-readable note from iCarry's real TRACK response shape (status/location/details[].notes). */
+function shipNoteFrom(icarryTracking) {
+  if (!icarryTracking?.status) return "Awaiting courier update";
+  const details = icarryTracking.details || [];
+  const latestNote = details[details.length - 1]?.notes;
+  const parts = [latestNote || icarryTracking.status, icarryTracking.courier_name].filter(Boolean);
+  return parts.join(" · ");
 }
 
 function customerLocation(shopifyOrder) {
@@ -56,22 +66,37 @@ function itemsSummary(shopifyOrder) {
 function buildLegs({ orderType, grossTotal, cashfreePayment, cashfreeSettlement, icarryRemit, shipCat }) {
   const legs = [];
 
+  // Two levels of confidence: `transfer_utr` is independent proof the money
+  // actually hit the bank; failing that, Cashfree/Shopify reporting the
+  // payment captured is still real (just not bank-settlement-verified) —
+  // see shopifyService.findCashfreePayment() for why not every order has a
+  // path to the stronger signal.
+  function cashfreeStatus() {
+    const settledToBank = Boolean(cashfreeSettlement?.transfer_utr);
+    const captured =
+      settledToBank || cashfreePayment?.payment_status === "SUCCESS" || cashfreePayment?.order_status === "PAID";
+    const note = settledToBank
+      ? `Settled to bank · UTR ${cashfreeSettlement.transfer_utr}`
+      : captured
+      ? "Captured via Cashfree · bank settlement not independently verified"
+      : "Expected settlement per Cashfree T+2 cycle";
+    return { settledToBank, captured, note };
+  }
+
   if (orderType === "prepaid") {
     const fee = cashfreeSettlement?.settlement_amount != null
       ? grossTotal - cashfreeSettlement.settlement_amount
       : null;
-    const settled = Boolean(cashfreeSettlement?.settlement_utr);
+    const { captured, note } = cashfreeStatus();
     legs.push({
       name: "Prepaid — Full Order",
       amt: fee != null
         ? `${formatINR(grossTotal)} gross · −${formatINR(fee)} PG fee`
         : `${formatINR(grossTotal)} gross`,
-      val: formatINR(cashfreeSettlement?.settlement_amount ?? grossTotal),
-      cls: settled ? "g" : "a",
-      tag: settled ? "confirmed" : "estimated",
-      note: settled
-        ? `Settled to bank · UTR ${cashfreeSettlement.settlement_utr}`
-        : "Expected settlement per Cashfree T+2 cycle",
+      val: formatINR(cashfreeSettlement?.settlement_amount ?? cashfreePayment?.order_amount ?? grossTotal),
+      cls: captured ? "g" : "a",
+      tag: captured ? "confirmed" : "estimated",
+      note,
     });
   }
 
@@ -93,17 +118,21 @@ function buildLegs({ orderType, grossTotal, cashfreePayment, cashfreeSettlement,
   }
 
   if (orderType === "partial") {
+    // cashfreePayment.order_amount reflects the actual advance transaction
+    // amount in both the full-lookup and Shopify-only-confirmed paths (see
+    // shopifyService.findCashfreePayment) — falls back to a 25% estimate
+    // only if no Cashfree transaction was found on the order at all.
     const advance = cashfreePayment?.order_amount ?? grossTotal * 0.25;
     const balance = grossTotal - advance;
-    const advSettled = Boolean(cashfreeSettlement?.settlement_utr);
+    const { captured, note: advanceNote } = cashfreeStatus();
     const balRemitted = Boolean(icarryRemit?.remittance_id);
     legs.push({
       name: "Advance (Prepaid)",
       amt: `${formatINR(advance)} gross`,
       val: formatINR(cashfreeSettlement?.settlement_amount ?? advance),
-      cls: advSettled ? "g" : "a",
-      tag: advSettled ? "confirmed" : "estimated",
-      note: advSettled ? "Settled · already secured regardless of outcome" : "Expected settlement soon",
+      cls: captured ? "g" : "a",
+      tag: captured ? "confirmed" : "estimated",
+      note: captured ? `${advanceNote} · already secured regardless of outcome` : advanceNote,
     });
     legs.push({
       name: "Balance (COD)",
@@ -130,22 +159,46 @@ function buildLegs({ orderType, grossTotal, cashfreePayment, cashfreeSettlement,
   return legs;
 }
 
+// A handful of iCarry's documented NDR event codes, for a readable shipNote.
+// Full list is in their API Document v17.0 — these are the common ones.
+const NDR_DESCRIPTIONS = {
+  "REATTEMPT-CONTACT": "Consignee unreachable / address unclear",
+  REATTEMPT: "Delivery attempt failed",
+  "REATTEMPT-COD-NOT-READY": "Consignee didn't have COD amount ready",
+  "CONSIGNEE-OPENED-REFUSED": "Consignee opened and refused parcel",
+  "REATTEMPT-CUST-REFUSED": "Consignee refused delivery",
+  "REATTEMPT-NEW-DATE": "Consignee asked for a future delivery date",
+  "REATTEMPT-OTP": "Consignee didn't have OTP to accept delivery",
+  "URGENT-DELIVERY": "Delivery detected as beyond EDD",
+};
+
 /**
  * Merges one Shopify order with its matched Cashfree payment/settlement and
- * iCarry tracking/remittance record into the flat shape the dashboard UI
- * renders. All three systems are joined on the Shopify order name (e.g.
- * "#5001") — wire that as the reference/order_id when creating the Cashfree
- * order and the iCarry shipment at checkout/fulfillment time.
+ * iCarry tracking/NDR data into the flat shape the dashboard UI renders.
+ * Cashfree is joined via the order_id its Shopify integration stamps into
+ * the order's transaction record (see shopifyService.findCashfreePayment).
+ * iCarry is joined via a local shipment_id mapping (see
+ * lib/icarryShipmentMap.js) since there's no documented way to resolve that
+ * from a Shopify order directly.
  */
-function mapOrder({ shopifyOrder, cashfreePayment, cashfreeSettlement, icarryTracking, icarryRemit }) {
+function mapOrder({ shopifyOrder, cashfreePayment, cashfreeSettlement, icarryTracking, icarryRemit, icarryNdr }) {
   const orderType = classifyOrderType(shopifyOrder);
   const grossTotal = Number(shopifyOrder.current_total_price ?? shopifyOrder.total_price ?? 0);
-  const rawStatus = icarryTracking?.status || (shopifyOrder.fulfillment_status ? "shipped" : "");
-  const shipCat = shopifyOrder.cancelled_at
+  // Real iCarry TRACK response's `status` is a human string like "Delivered"
+  // or "Manifested" (confirmed against their API Document v17.0), not a code.
+  let shipCat = shopifyOrder.cancelled_at
     ? "cancelled"
-    : icarryTracking
-    ? mapTrackingStatus(rawStatus)
+    : icarryTracking?.status
+    ? mapTrackingStatus(icarryTracking.status)
     : "unful";
+
+  // NDR isn't part of TRACK's status vocabulary — it's a separate signal
+  // from iCarry's NDR webhook. Layer it on top unless the shipment has
+  // already reached a terminal state (delivered/RTO'd/cancelled), in which
+  // case the NDR is moot and TRACK's own status wins.
+  if (icarryNdr && !["delivered", "rto", "cancelled"].includes(shipCat)) {
+    shipCat = "ndr";
+  }
 
   const legs = buildLegs({ orderType, grossTotal, cashfreePayment, cashfreeSettlement, icarryRemit, shipCat });
 
@@ -162,9 +215,12 @@ function mapOrder({ shopifyOrder, cashfreePayment, cashfreeSettlement, icarryTra
     items: itemsSummary(shopifyOrder),
     shipCat,
     shipLabel: SHIP_LABELS[shipCat] || shipCat,
-    shipNote: icarryTracking?.status_detail || icarryTracking?.status || "Awaiting courier update",
-    track: Boolean(icarryTracking?.awb),
-    trackingUrl: icarryTracking?.tracking_url || null,
+    shipNote: shipCat === "ndr" ? NDR_DESCRIPTIONS[icarryNdr.type] || icarryNdr.type : shipNoteFrom(icarryTracking),
+    // Real TRACK response has no awb/tracking_url field to build a working
+    // link from (confirmed against iCarry's API doc) — we know the status,
+    // just can't offer a clickable tracking link yet.
+    track: Boolean(icarryTracking?.status),
+    trackingUrl: null,
     sync: cashfreePayment && icarryTracking ? "paid+tracking" : icarryTracking ? "tracking" : "none",
     wa: null, // WhatsApp alerting isn't one of the three source systems — see README "Alerts" section
     legs,
