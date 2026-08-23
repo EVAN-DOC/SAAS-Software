@@ -77,6 +77,11 @@ export interface Shipment {
   shipmentId: string | null;
   edd: string | null;
   trackHistory: TrackEvent[];
+  address: string | null;
+  phone: string | null;
+  awb: string | null;
+  currentLocation: string | null;
+  deliveredDate: string | null;
   pincode: string | null;
   weightGrams: number;
   shipmentValue: number;

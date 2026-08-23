@@ -4,6 +4,7 @@ const { getShippingList } = require("../aggregator/buildShipping");
 const { getEnrichedOrders } = require("../aggregator/enrichOrders");
 const icarryService = require("../services/icarryService");
 const icarryShipmentMap = require("../lib/icarryShipmentMap");
+const icarryAwbMap = require("../lib/icarryAwbMap");
 const { invalidate } = require("../lib/cache");
 
 const router = express.Router();
@@ -115,6 +116,7 @@ router.post("/:orderId/book", async (req, res, next) => {
 
     if (result?.shipment_id) {
       icarryShipmentMap.setShipmentId(shopifyOrder.name, String(result.shipment_id));
+      if (result.awb) icarryAwbMap.setAwb(shopifyOrder.name, String(result.awb));
       invalidate("enriched");
       invalidate("dashboard");
       invalidate("shipping");

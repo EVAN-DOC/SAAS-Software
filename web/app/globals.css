@@ -172,7 +172,15 @@ footer{text-align:center; color:var(--faint); font-size:10.5px; margin-top:24px;
 }
 
 /* ---- Shipping page ---- */
-.card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 15px; margin-bottom:9px;}
+.card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 15px; margin-bottom:9px; cursor:pointer;}
+.chevron{font-size:9px; color:var(--faint); margin-left:6px; transition:transform .15s ease; display:inline-block;}
+.ship-detail{display:none; margin-top:12px; padding-top:12px; border-top:1px solid var(--border-soft);}
+.card.open .ship-detail{display:block;}
+.ship-detail-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+.ship-detail-field{font-size:11.5px;}
+.ship-detail-field.full{grid-column:1/-1;}
+.ship-detail-field .dl{color:var(--faint); font-size:10px; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:2px;}
+.ship-detail-field .dv{font-weight:600;}
 .card-top{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; gap:10px;}
 .cust{font-weight:600; font-size:12.5px; text-align:right;}
 .loc{font-size:10.5px; color:var(--faint); text-align:right; margin-top:2px;}
@@ -208,6 +216,7 @@ footer{text-align:center; color:var(--faint); font-size:10.5px; margin-top:24px;
   .status-row{display:contents;}
   .status-row > div:first-child{border:none; padding-top:0;}
   .cust, .loc{text-align:left;}
+  .ship-detail{grid-column:1/-1;}
 }
 
 .overlay{

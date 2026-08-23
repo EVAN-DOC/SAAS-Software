@@ -1,3 +1,5 @@
+const icarryAwbMap = require("../lib/icarryAwbMap");
+
 const SHIP_STATUS_LABELS = {
   notscheduled: "Not Scheduled",
   scheduled: "Scheduled",
@@ -33,6 +35,21 @@ function shipmentWeightGrams(shopifyOrder) {
   return grams > 0 ? grams : 500; // fallback default when Shopify has no weight on the line items
 }
 
+function deliveryAddress(shopifyOrder) {
+  const addr = shopifyOrder.shipping_address;
+  if (!addr) return null;
+  return [addr.address1, addr.address2].filter(Boolean).join(", ") || null;
+}
+
+function deliveryPhone(shopifyOrder) {
+  return shopifyOrder.shipping_address?.phone || shopifyOrder.phone || shopifyOrder.customer?.phone || null;
+}
+
+/** Last known event, i.e. the most recent tracking update — iCarry's TRACK `details` array is chronological (oldest first). */
+function latestTrackEvent(trackHistory) {
+  return trackHistory.length ? trackHistory[trackHistory.length - 1] : null;
+}
+
 /** Maps one enriched record (see enrichOrders.js) into the shipping page's card shape. */
 function mapShipment(record, formatINR) {
   const { shopifyOrder, icarryTracking, icarryShipmentId } = record;
@@ -50,6 +67,7 @@ function mapShipment(record, formatINR) {
     location: d.location || "—",
     note: d.notes,
   }));
+  const latestEvent = latestTrackEvent(trackHistory);
 
   return {
     id: shopifyOrder.name,
@@ -65,6 +83,11 @@ function mapShipment(record, formatINR) {
     shipmentId: icarryShipmentId || null,
     edd: icarryTracking?.edd || null,
     trackHistory,
+    address: deliveryAddress(shopifyOrder),
+    phone: deliveryPhone(shopifyOrder),
+    awb: icarryAwbMap.getAwb(shopifyOrder.name),
+    currentLocation: shipStatus !== "notscheduled" && shipStatus !== "delivered" ? latestEvent?.location || null : null,
+    deliveredDate: shipStatus === "delivered" ? latestEvent?.datetime || null : null,
     // Needed client-side to request a real courier estimate / booking.
     pincode: shopifyOrder.shipping_address?.zip || null,
     weightGrams: shipmentWeightGrams(shopifyOrder),
