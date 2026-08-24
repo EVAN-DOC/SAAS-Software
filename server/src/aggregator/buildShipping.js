@@ -4,6 +4,7 @@ const { formatINR } = require("../lib/money");
 const { mapShipment } = require("./mapShipment");
 const { getEnrichedOrders } = require("./enrichOrders");
 const { mockOrders } = require("../mock/mockOrders");
+const icarryReturnMap = require("../lib/icarryReturnMap");
 
 function computeShipKpis(shipments) {
   const counts = { notscheduled: 0, scheduled: 0, transit: 0, delivered: 0, rto: 0 };
@@ -102,6 +103,7 @@ function mockShipments() {
       awb: shipStatus === "notscheduled" ? null : mockAwb(o.id),
       currentLocation: shipStatus !== "notscheduled" && shipStatus !== "delivered" ? latestEvent?.location || null : null,
       deliveredDate: shipStatus === "delivered" ? latestEvent?.datetime || null : null,
+      returnPickup: shipStatus === "delivered" ? icarryReturnMap.getReturnPickup(o.id) : null,
       pincode: null,
       weightGrams: 500,
       shipmentValue: 0,

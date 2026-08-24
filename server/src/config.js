@@ -23,7 +23,12 @@ module.exports = {
     // the app is uninstalled/reinstalled.
     clientId: process.env.SHOPIFY_CLIENT_ID,
     clientSecret: process.env.SHOPIFY_CLIENT_SECRET,
-    scopes: process.env.SHOPIFY_SCOPES || "read_orders,read_customers,read_fulfillments",
+    // write_orders is required to push iCarry shipment references (shipment_id,
+    // awb, courier, tracking url) onto the order as metafields — see
+    // shopifyService.js's setIcarryReferenceMetafields(). Adding it to an
+    // already-installed app requires re-visiting /auth/shopify to re-consent;
+    // the existing stored token keeps its old (narrower) scopes until then.
+    scopes: process.env.SHOPIFY_SCOPES || "read_orders,read_customers,read_fulfillments,write_orders",
     redirectUri: process.env.SHOPIFY_REDIRECT_URI || `http://localhost:${process.env.PORT || 4000}/auth/shopify/callback`,
     // Unset (default) = pull the store's entire order history. Set this once
     // your order count grows large enough that every dashboard load re-fetching

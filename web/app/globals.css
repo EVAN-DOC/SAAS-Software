@@ -202,6 +202,9 @@ footer{text-align:center; color:var(--faint); font-size:10.5px; margin-top:24px;
 .btn.track{background:var(--surface); color:var(--navy); border:1.5px solid var(--navy);}
 .btn:disabled{opacity:0.6; cursor:not-allowed;}
 
+.btn.return-pickup{display:inline-flex; align-items:center; gap:6px; width:auto; margin-top:12px; padding:9px 16px; background:var(--purple); color:#fff; font-size:12px; border-radius:20px;}
+.return-info{margin-top:12px; font-size:11px; color:var(--purple); background:var(--purple-bg); border-radius:8px; padding:8px 11px; font-weight:600;}
+
 /* Full-width row layout on desktop, same idea as .order-row — stacked card
    layout (the block above) stays as the default for narrow/mobile. */
 @media (min-width:900px){

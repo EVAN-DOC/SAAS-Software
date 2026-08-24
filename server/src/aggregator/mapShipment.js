@@ -1,4 +1,5 @@
 const icarryAwbMap = require("../lib/icarryAwbMap");
+const icarryReturnMap = require("../lib/icarryReturnMap");
 
 const SHIP_STATUS_LABELS = {
   notscheduled: "Not Scheduled",
@@ -88,6 +89,7 @@ function mapShipment(record, formatINR) {
     awb: icarryAwbMap.getAwb(shopifyOrder.name),
     currentLocation: shipStatus !== "notscheduled" && shipStatus !== "delivered" ? latestEvent?.location || null : null,
     deliveredDate: shipStatus === "delivered" ? latestEvent?.datetime || null : null,
+    returnPickup: shipStatus === "delivered" ? icarryReturnMap.getReturnPickup(shopifyOrder.name) : null,
     // Needed client-side to request a real courier estimate / booking.
     pincode: shopifyOrder.shipping_address?.zip || null,
     weightGrams: shipmentWeightGrams(shopifyOrder),

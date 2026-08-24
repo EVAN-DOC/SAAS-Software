@@ -8,7 +8,7 @@ import ScheduleModal from "./ScheduleModal";
 import TrackModal from "./TrackModal";
 import Toast from "./Toast";
 import { Shipment, ShipStatus } from "@/lib/types";
-import { fetchLabel } from "@/lib/api";
+import { fetchLabel, scheduleReturnPickup } from "@/lib/api";
 
 const PAGE_SIZE = 15;
 
@@ -35,6 +35,7 @@ export default function ShippingDashboard({ initialShipments, mock, bookingEnabl
   const [trackId, setTrackId] = useState<string | null>(null);
   const [scheduleId, setScheduleId] = useState<string | null>(null);
   const [labelLoadingId, setLabelLoadingId] = useState<string | null>(null);
+  const [returnLoadingId, setReturnLoadingId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   function showToast(msg: string) {
@@ -82,6 +83,34 @@ export default function ShippingDashboard({ initialShipments, mock, bookingEnabl
       showToast(err instanceof Error ? err.message : "Couldn't fetch label");
     } finally {
       setLabelLoadingId(null);
+    }
+  }
+
+  async function handleScheduleReturn(orderId: string) {
+    setReturnLoadingId(orderId);
+    try {
+      const result = await scheduleReturnPickup(orderId);
+      setShipments((prev) =>
+        prev.map((s) =>
+          s.id === orderId
+            ? {
+                ...s,
+                returnPickup: {
+                  awb: result.awb ?? null,
+                  courierName: result.courierName ?? null,
+                  trackingUrl: result.trackingUrl ?? null,
+                  pickupId: result.pickupId ?? null,
+                  scheduledAt: result.scheduledAt ?? new Date().toISOString(),
+                },
+              }
+            : s
+        )
+      );
+      showToast(`Return pickup scheduled for ${orderId}${result.awb ? ` — AWB ${result.awb}` : ""}`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Couldn't schedule return pickup");
+    } finally {
+      setReturnLoadingId(null);
     }
   }
 
@@ -135,7 +164,9 @@ export default function ShippingDashboard({ initialShipments, mock, bookingEnabl
               onSchedule={setScheduleId}
               onTrack={setTrackId}
               onLabel={handleLabel}
+              onScheduleReturn={handleScheduleReturn}
               labelLoading={labelLoadingId === s.id}
+              returnLoading={returnLoadingId === s.id}
             />
           ))}
           {visible.length === 0 && <div className="state-msg">No orders match this filter.</div>}

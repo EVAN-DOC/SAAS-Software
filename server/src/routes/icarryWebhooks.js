@@ -2,6 +2,8 @@ const express = require("express");
 const config = require("../config");
 const icarryShipmentMap = require("../lib/icarryShipmentMap");
 const icarryNdrStore = require("../lib/icarryNdrStore");
+const icarryAwbMap = require("../lib/icarryAwbMap");
+const shopifyService = require("../services/shopifyService");
 
 const router = express.Router();
 
@@ -19,22 +21,43 @@ function verifyToken(req, res) {
 }
 
 /**
+ * Best-effort push of the iCarry shipment reference onto the matching
+ * Shopify order as metafields (admin-only, no fulfillment/notification
+ * side effects — see shopifyService.setIcarryReferenceMetafields). Called
+ * after the webhook has already responded, so a slow/failed Shopify call
+ * never delays or fails the ack iCarry is waiting on.
+ */
+async function pushIcarryReferenceToShopify(clientOrderId, { shipmentId, awb }) {
+  const shopifyOrderId = await shopifyService.findOrderIdByName(clientOrderId);
+  if (!shopifyOrderId) return;
+  await shopifyService.setIcarryReferenceMetafields(shopifyOrderId, { shipmentId, awb });
+}
+
+/**
  * iCarry's "Webhook / POST Call Back on change in Shipment STATUS".
  * Register this URL (once publicly reachable) at: iCarry panel > Account >
  * Integrations > API Credentials > "Webhook URL to get Shipment Status".
  *
- * Two jobs: (1) learn shipment_id <-> Shopify order mappings automatically
- * for new orders, so we stop depending on manual CSV re-imports, and (2)
- * clear any stale NDR flag once a shipment reaches a terminal state.
+ * Three jobs: (1) learn shipment_id <-> Shopify order mappings automatically
+ * for new orders, so we stop depending on manual CSV re-imports, (2) clear
+ * any stale NDR flag once a shipment reaches a terminal state, and (3)
+ * capture the awb this payload carries (per the doc's field list) — this is
+ * the only place besides a fresh booking response that this app ever learns
+ * a shipment's AWB, so orders shipped via iCarry's own Shopify connector
+ * (not booked through this dashboard) only get an AWB once this webhook
+ * fires for them at least once after being registered.
  */
 router.post("/status", (req, res) => {
   if (!verifyToken(req, res)) return;
 
-  const { shipment_id, client_order_id, status } = req.body;
+  const { shipment_id, client_order_id, status, awb } = req.body;
   console.log(`[iCarry webhook] status: shipment ${shipment_id}, order ${client_order_id}, status code ${status}`);
 
   if (client_order_id && /^#/.test(client_order_id) && shipment_id) {
     icarryShipmentMap.setShipmentId(client_order_id, String(shipment_id));
+  }
+  if (client_order_id && /^#/.test(client_order_id) && awb) {
+    icarryAwbMap.setAwb(client_order_id, String(awb));
   }
 
   const statusCode = Number(status);
@@ -43,6 +66,12 @@ router.post("/status", (req, res) => {
   }
 
   res.json({ success: true });
+
+  if (client_order_id && /^#/.test(client_order_id) && (shipment_id || awb)) {
+    pushIcarryReferenceToShopify(client_order_id, { shipmentId: shipment_id, awb }).catch((err) => {
+      console.warn(`[shopify] Couldn't write iCarry reference metafields for ${client_order_id}: ${err.message}`);
+    });
+  }
 });
 
 /**

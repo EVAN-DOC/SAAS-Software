@@ -182,6 +182,15 @@ async function printShipmentLabel(shipmentId, paperSize) {
   return post("/api_print_shipment_label", { shipment_id: shipmentId, paper_size: paperSize });
 }
 
+/**
+ * REVERSE Shipment — books a reverse pickup for a shipment that has already
+ * been delivered. REAL, consequential action (schedules a real pickup and
+ * generates a new AWB for the return leg), same caution as bookShipment.
+ */
+async function reverseShipment(shipmentId) {
+  return post("/api_add_reverse_shipment", { shipment_id: shipmentId });
+}
+
 // Numeric codes from SYNC Shipment STATUS's documented status table.
 const NUMERIC_STATUS = {
   1: "Pending Pickup",
@@ -224,5 +233,6 @@ module.exports = {
   getEstimate,
   bookShipment,
   printShipmentLabel,
+  reverseShipment,
   mapTrackingStatus,
 };

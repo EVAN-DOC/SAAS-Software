@@ -1,4 +1,4 @@
-import { BookResponse, DashboardResponse, EstimateResponse, LabelResponse, ShippingListResponse } from "./types";
+import { BookResponse, DashboardResponse, EstimateResponse, LabelResponse, ReturnPickupResponse, ShippingListResponse } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
 
@@ -59,5 +59,16 @@ export async function fetchLabel(orderId: string): Promise<LabelResponse> {
   const res = await fetch(`${API_BASE_URL}/api/shipments/${encodeURIComponent(orderId)}/label`);
   const data = await res.json();
   if (!res.ok) throw new Error(data?.error || `Label fetch failed (${res.status})`);
+  return data;
+}
+
+/** REAL booking — schedules an actual reverse pickup for a delivered shipment and generates a new AWB for the return leg. */
+export async function scheduleReturnPickup(orderId: string): Promise<ReturnPickupResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/shipments/${encodeURIComponent(orderId)}/return-pickup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || `Return pickup scheduling failed (${res.status})`);
   return data;
 }

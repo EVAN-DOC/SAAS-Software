@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
-    "import:icarry-shipments": "node scripts/importIcarryShipments.js"
+    "import:icarry-shipments": "node scripts/importIcarryShipments.js",
+    "push:icarry-shipment-ids": "node scripts/pushIcarryShipmentIdsToShopify.js"
   },
   "dependencies": {
     "axios": "^1.7.9",

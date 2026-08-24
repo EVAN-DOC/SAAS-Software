@@ -63,6 +63,14 @@ export interface TrackEvent {
   note: string;
 }
 
+export interface ReturnPickup {
+  awb: string | null;
+  courierName: string | null;
+  trackingUrl: string | null;
+  pickupId: string | null;
+  scheduledAt: string;
+}
+
 export interface Shipment {
   id: string;
   date: string;
@@ -82,6 +90,7 @@ export interface Shipment {
   awb: string | null;
   currentLocation: string | null;
   deliveredDate: string | null;
+  returnPickup: ReturnPickup | null;
   pincode: string | null;
   weightGrams: number;
   shipmentValue: number;
@@ -131,4 +140,9 @@ export interface LabelResponse {
   awb?: string;
   courier_name?: string;
   shipment_label?: { url: string; type: string }[];
+}
+
+export interface ReturnPickupResponse extends ReturnPickup {
+  success?: string;
+  error?: string;
 }

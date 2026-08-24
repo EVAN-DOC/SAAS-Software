@@ -111,6 +111,89 @@ async function findCashfreePayment(shopifyOrderId) {
   };
 }
 
+/** Looks up a Shopify order's numeric id from its display name (e.g. "#1633") — needed to build a GraphQL gid for metafield writes. */
+async function findOrderIdByName(name) {
+  const http = client();
+  const res = await http.get("/orders.json", { params: { name, status: "any", fields: "id,name" } });
+  return res.data.orders?.[0]?.id || null;
+}
+
+async function graphql(query, variables) {
+  const http = client();
+  const res = await http.post("/graphql.json", { query, variables });
+  if (res.data.errors) throw new Error(`Shopify GraphQL error: ${JSON.stringify(res.data.errors)}`);
+  return res.data.data;
+}
+
+/**
+ * Creates (and pins) the "icarry.shipment_id" metafield definition on the
+ * Order resource so it's selectable as a column in Shopify admin's Orders
+ * list (Orders > Edit columns) — internal-only reference, no storefront
+ * visibility. Safe to call repeatedly: a "taken"/already-exists userError is
+ * swallowed as a no-op rather than thrown.
+ */
+async function ensureIcarryShipmentIdMetafieldDefinition() {
+  const data = await graphql(
+    `#graphql
+      mutation ensureIcarryShipmentIdDefinition($definition: MetafieldDefinitionInput!) {
+        metafieldDefinitionCreate(definition: $definition) {
+          createdDefinition { id }
+          userErrors { field message code }
+        }
+      }`,
+    {
+      definition: {
+        name: "iCarry Shipment ID",
+        namespace: "icarry",
+        key: "shipment_id",
+        description: "Internal reference — this order's shipment id in iCarry (used to look up tracking/label/reverse-pickup).",
+        ownerType: "ORDER",
+        type: "single_line_text_field",
+        pin: true,
+      },
+    }
+  );
+  const errors = data.metafieldDefinitionCreate.userErrors || [];
+  const fatal = errors.filter((e) => e.code !== "TAKEN");
+  if (fatal.length) {
+    throw new Error(`Shopify metafieldDefinitionCreate userErrors: ${JSON.stringify(fatal)}`);
+  }
+  return data.metafieldDefinitionCreate.createdDefinition;
+}
+
+/**
+ * Writes iCarry's shipment reference (shipment_id, awb, courier, tracking
+ * url) onto the order as metafields — admin-only visibility, no fulfillment
+ * status change, no customer notification. Requires the write_orders scope
+ * (see config.js) — the app must be re-authorized via /auth/shopify after
+ * that scope is added before this will succeed on a previously-installed token.
+ */
+async function setIcarryReferenceMetafields(shopifyOrderId, { shipmentId, awb, courierName, trackingUrl } = {}) {
+  const ownerId = `gid://shopify/Order/${shopifyOrderId}`;
+  const metafields = [
+    shipmentId != null ? { ownerId, namespace: "icarry", key: "shipment_id", type: "single_line_text_field", value: String(shipmentId) } : null,
+    awb ? { ownerId, namespace: "icarry", key: "awb", type: "single_line_text_field", value: String(awb) } : null,
+    courierName ? { ownerId, namespace: "icarry", key: "courier_name", type: "single_line_text_field", value: String(courierName) } : null,
+    trackingUrl ? { ownerId, namespace: "icarry", key: "tracking_url", type: "url", value: String(trackingUrl) } : null,
+  ].filter(Boolean);
+  if (!metafields.length) return null;
+
+  const data = await graphql(
+    `#graphql
+      mutation setIcarryReferenceMetafields($metafields: [MetafieldsSetInput!]!) {
+        metafieldsSet(metafields: $metafields) {
+          metafields { id namespace key value }
+          userErrors { field message }
+        }
+      }`,
+    { metafields }
+  );
+  if (data.metafieldsSet.userErrors?.length) {
+    throw new Error(`Shopify metafieldsSet userErrors: ${JSON.stringify(data.metafieldsSet.userErrors)}`);
+  }
+  return data.metafieldsSet.metafields;
+}
+
 function parseNextLink(linkHeader) {
   if (!linkHeader) return null;
   const match = linkHeader
@@ -124,4 +207,11 @@ function parseNextLink(linkHeader) {
   return { limit: 250, page_info: pageInfo };
 }
 
-module.exports = { fetchRecentOrders, fetchOrderTransactions, findCashfreePayment };
+module.exports = {
+  fetchRecentOrders,
+  fetchOrderTransactions,
+  findCashfreePayment,
+  findOrderIdByName,
+  setIcarryReferenceMetafields,
+  ensureIcarryShipmentIdMetafieldDefinition,
+};

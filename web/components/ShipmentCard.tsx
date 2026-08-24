@@ -20,10 +20,12 @@ interface Props {
   onSchedule: (id: string) => void;
   onTrack: (id: string) => void;
   onLabel: (id: string) => void;
+  onScheduleReturn: (id: string) => void;
   labelLoading: boolean;
+  returnLoading: boolean;
 }
 
-export default function ShipmentCard({ shipment: o, onSchedule, onTrack, onLabel, labelLoading }: Props) {
+export default function ShipmentCard({ shipment: o, onSchedule, onTrack, onLabel, onScheduleReturn, labelLoading, returnLoading }: Props) {
   const [open, setOpen] = useState(false);
   const isNotScheduled = o.shipStatus === "notscheduled";
   const isDelivered = o.shipStatus === "delivered";
@@ -116,6 +118,19 @@ export default function ShipmentCard({ shipment: o, onSchedule, onTrack, onLabel
             </>
           ) : null}
         </div>
+
+        {isDelivered && (
+          o.returnPickup ? (
+            <div className="return-info">
+              Return pickup scheduled · AWB {o.returnPickup.awb || "—"}
+              {o.returnPickup.courierName ? ` · ${o.returnPickup.courierName}` : ""}
+            </div>
+          ) : (
+            <button className="btn return-pickup" onClick={stop(() => onScheduleReturn(o.id))} disabled={returnLoading}>
+              {returnLoading ? "Scheduling…" : "↩ Schedule Return Pickup"}
+            </button>
+          )
+        )}
       </div>
     </div>
   );
