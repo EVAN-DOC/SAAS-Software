@@ -83,6 +83,24 @@ function buildLegs({ orderType, grossTotal, cashfreePayment, cashfreeSettlement,
     return { settledToBank, captured, note };
   }
 
+  // icarryRemit is the real "COD REMITTANCE" response shape (confirmed live,
+  // not in iCarry's API Document v17.0 — see icarryService.getRemittanceDetail):
+  // { paid, paid_date, reference, payout_id, is_delivered }. There is no
+  // courier-fee or per-shipment freight field in this response — iCarry's
+  // separate "SYNC Shipment CHARGES" endpoint (icarryService.syncShipmentCharges,
+  // `miles` field) is the closest verified source for that if it's ever wired in.
+  function icarryRemitStatus(notYetNote) {
+    const remitted = Boolean(icarryRemit?.paid);
+    const note = remitted
+      ? ["Remitted", icarryRemit.paid_date && `on ${icarryRemit.paid_date}`, icarryRemit.reference && `· Ref ${icarryRemit.reference}`]
+          .filter(Boolean)
+          .join(" ")
+      : icarryRemit?.is_delivered
+      ? "Delivered — awaiting iCarry COD remittance"
+      : notYetNote;
+    return { remitted, note };
+  }
+
   if (orderType === "prepaid") {
     const fee = cashfreeSettlement?.settlement_amount != null
       ? grossTotal - cashfreeSettlement.settlement_amount
@@ -101,19 +119,14 @@ function buildLegs({ orderType, grossTotal, cashfreePayment, cashfreeSettlement,
   }
 
   if (orderType === "cod") {
-    const courierFee = icarryRemit?.courier_fee ?? null;
-    const remitted = Boolean(icarryRemit?.remittance_id);
+    const { remitted, note } = icarryRemitStatus("Expected remittance per iCarry COD cycle");
     legs.push({
       name: "COD — Full Order",
-      amt: courierFee != null
-        ? `${formatINR(grossTotal)} gross · −${formatINR(courierFee)} courier fee`
-        : `${formatINR(grossTotal)} gross`,
-      val: formatINR(grossTotal - (courierFee || 0)),
+      amt: `${formatINR(grossTotal)} gross`,
+      val: formatINR(grossTotal),
       cls: remitted ? "g" : "a",
       tag: remitted ? "confirmed" : "estimated",
-      note: remitted
-        ? `Remitted · Batch #${icarryRemit.remittance_id}`
-        : "Expected remittance per iCarry COD cycle",
+      note,
     });
   }
 
@@ -125,7 +138,7 @@ function buildLegs({ orderType, grossTotal, cashfreePayment, cashfreeSettlement,
     const advance = cashfreePayment?.order_amount ?? grossTotal * 0.25;
     const balance = grossTotal - advance;
     const { captured, note: advanceNote } = cashfreeStatus();
-    const balRemitted = Boolean(icarryRemit?.remittance_id);
+    const { remitted: balRemitted, note: balNote } = icarryRemitStatus("Awaiting dispatch / delivery");
     legs.push({
       name: "Advance (Prepaid)",
       amt: `${formatINR(advance)} gross`,
@@ -140,16 +153,18 @@ function buildLegs({ orderType, grossTotal, cashfreePayment, cashfreeSettlement,
       val: formatINR(balance),
       cls: balRemitted ? "g" : "a",
       tag: balRemitted ? "confirmed" : "estimated",
-      note: balRemitted ? `Remitted · Batch #${icarryRemit.remittance_id}` : "Awaiting dispatch / delivery",
+      note: balNote,
     });
   }
 
   if (shipCat === "rto") {
-    const freight = icarryRemit?.rto_freight ?? null;
+    // No verified iCarry endpoint yet returns the actual per-shipment RTO
+    // freight amount (see icarryRemitStatus's comment above) — shown as TBD
+    // rather than a fabricated number until one is wired in.
     legs.push({
       name: "RTO Freight (charged to you)",
       amt: "Return shipping cost",
-      val: freight != null ? `-${formatINR(freight)}` : "TBD — pending iCarry wallet debit",
+      val: "TBD — pending iCarry wallet debit",
       cls: "r",
       tag: "confirmed",
       note: "Deducted from wallet on return scan",

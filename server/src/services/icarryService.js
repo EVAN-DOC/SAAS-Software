@@ -191,6 +191,18 @@ async function reverseShipment(shipmentId) {
   return post("/api_add_reverse_shipment", { shipment_id: shipmentId });
 }
 
+/**
+ * COD REMITTANCE detail for a single shipment — not in iCarry's API Document
+ * v17.0 (that PDF has no remittance section); confirmed live against this
+ * account's real shipments instead. Read-only.
+ * Response shape (confirmed): { success, shipment_id, is_cod, is_delivered,
+ * paid, paid_date, reference, payout_id }. Non-COD / not-yet-processed
+ * shipments come back with is_cod/paid at 0 and the rest blank, not an error.
+ */
+async function getRemittanceDetail(shipmentId) {
+  return post("/api_get_remittance_detail", { shipment_id: shipmentId });
+}
+
 // Numeric codes from SYNC Shipment STATUS's documented status table.
 const NUMERIC_STATUS = {
   1: "Pending Pickup",
@@ -234,5 +246,6 @@ module.exports = {
   bookShipment,
   printShipmentLabel,
   reverseShipment,
+  getRemittanceDetail,
   mapTrackingStatus,
 };

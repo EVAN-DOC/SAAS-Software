@@ -1,0 +1,44 @@
+services:
+  - type: web
+    name: onescreen-api
+    runtime: node
+    plan: starter
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: MOCK_MODE
+        value: "false"
+      - key: SHOPIFY_SHOP_DOMAIN
+        sync: false
+      - key: SHOPIFY_API_VERSION
+        sync: false
+      - key: SHOPIFY_ACCESS_TOKEN
+        sync: false
+      - key: SHOPIFY_CLIENT_ID
+        sync: false
+      - key: SHOPIFY_CLIENT_SECRET
+        sync: false
+      - key: SHOPIFY_SCOPES
+        sync: false
+      - key: SHOPIFY_REDIRECT_URI
+        sync: false
+      - key: CASHFREE_ENV
+        sync: false
+      - key: CASHFREE_CLIENT_ID
+        sync: false
+      - key: CASHFREE_CLIENT_SECRET
+        sync: false
+      - key: CASHFREE_API_VERSION
+        sync: false
+      - key: ICARRY_API_USERNAME
+        sync: false
+      - key: ICARRY_API_KEY
+        sync: false
+      - key: ICARRY_PICKUP_ADDRESS_ID
+        sync: false
+      - key: ICARRY_ORIGIN_PINCODE
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false

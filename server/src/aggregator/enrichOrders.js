@@ -44,6 +44,19 @@ async function fetchEnrichedOrders() {
       // last known status was.
       const icarryNdr = icarryShipmentId ? icarryNdrStore.getNdr(icarryShipmentId) : null;
 
+      // COD remittance (has this shipment's cash-on-delivery amount actually
+      // been paid out to us yet) — separate call from TRACK, only meaningful
+      // once a shipment_id exists.
+      let icarryRemit = null;
+      if (icarryShipmentId) {
+        try {
+          const result = await icarryService.getRemittanceDetail(icarryShipmentId);
+          icarryRemit = result?.success ? result : null;
+        } catch {
+          icarryRemit = null;
+        }
+      }
+
       let cfPayment = null;
       try {
         cfPayment = await shopifyService.findCashfreePayment(shopifyOrder.id);
@@ -80,7 +93,7 @@ async function fetchEnrichedOrders() {
         cashfreePayment = { order_amount: cfPayment.amount, payment_status: "SUCCESS", cf_payment_id: cfPayment.cfPaymentId };
       }
 
-      return { shopifyOrder, cashfreePayment, cashfreeSettlement, icarryTracking, icarryNdr, icarryShipmentId };
+      return { shopifyOrder, cashfreePayment, cashfreeSettlement, icarryTracking, icarryNdr, icarryRemit, icarryShipmentId };
     },
     // Kept low because each order does a Shopify transactions.json lookup,
     // and standard Shopify apps are rate-limited to 2 req/s (see the 429
