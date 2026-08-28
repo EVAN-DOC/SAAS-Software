@@ -57,6 +57,14 @@ function customerName(shopifyOrder) {
   return addr ? addr.name : "Guest";
 }
 
+// Every real channel (Online Store, POS, and this store's checkout apps —
+// Fastrr, FlexyPe — confirmed live) always stamps a source_name. Shopify
+// only leaves it absent, or sets it to "shopify_draft_order", for an order
+// created by hand in the admin (Orders > Create order / a completed draft).
+function isManualOrder(shopifyOrder) {
+  return !shopifyOrder.source_name || shopifyOrder.source_name === "shopify_draft_order";
+}
+
 function itemsSummary(shopifyOrder) {
   return (shopifyOrder.line_items || [])
     .map((li) => `${li.title}${li.variant_title ? " · " + li.variant_title : ""}`)
@@ -223,6 +231,7 @@ function mapOrder({ shopifyOrder, cashfreePayment, cashfreeSettlement, icarryTra
 
   return {
     id: shopifyOrder.name,
+    manual: isManualOrder(shopifyOrder),
     date: shopifyOrder.created_at,
     customer: customerName(shopifyOrder),
     loc: customerLocation(shopifyOrder),

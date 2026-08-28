@@ -7,8 +7,10 @@ import ShipmentCard from "./ShipmentCard";
 import ScheduleModal from "./ScheduleModal";
 import TrackModal from "./TrackModal";
 import Toast from "./Toast";
+import Pagination from "./Pagination";
 import { Shipment, ShipStatus } from "@/lib/types";
 import { fetchLabel, scheduleReturnPickup } from "@/lib/api";
+import { DATE_RANGES, DateRangeKey, isWithinDateRange } from "@/lib/dateRange";
 
 const PAGE_SIZE = 15;
 
@@ -31,7 +33,9 @@ interface Props {
 export default function ShippingDashboard({ initialShipments, mock, bookingEnabled, loadError }: Props) {
   const [shipments, setShipments] = useState(initialShipments);
   const [activeFilter, setActiveFilter] = useState<ShipStatus | "all">("all");
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [search, setSearch] = useState("");
+  const [dateRange, setDateRange] = useState<DateRangeKey>("all");
+  const [page, setPage] = useState(1);
   const [trackId, setTrackId] = useState<string | null>(null);
   const [scheduleId, setScheduleId] = useState<string | null>(null);
   const [labelLoadingId, setLabelLoadingId] = useState<string | null>(null);
@@ -43,29 +47,50 @@ export default function ShippingDashboard({ initialShipments, mock, bookingEnabl
     setTimeout(() => setToast(null), 2600);
   }
 
-  const filtered = useMemo(
-    () => shipments.filter((s) => activeFilter === "all" || s.shipStatus === activeFilter),
-    [shipments, activeFilter]
-  );
+  const dateFiltered = useMemo(() => shipments.filter((s) => isWithinDateRange(s.date, dateRange)), [shipments, dateRange]);
+
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return dateFiltered.filter((s) => {
+      if (activeFilter !== "all" && s.shipStatus !== activeFilter) return false;
+      if (!term) return true;
+      return (
+        s.id.toLowerCase().includes(term) ||
+        s.customer.toLowerCase().includes(term) ||
+        s.loc.toLowerCase().includes(term)
+      );
+    });
+  }, [dateFiltered, activeFilter, search]);
 
   const kpis = useMemo(() => {
     const counts: Record<ShipStatus, number> = { notscheduled: 0, scheduled: 0, transit: 0, delivered: 0, rto: 0 };
-    shipments.forEach((s) => { counts[s.shipStatus]++; });
+    dateFiltered.forEach((s) => { counts[s.shipStatus]++; });
     return [
       { key: "notscheduled", l: "Not Scheduled", v: String(counts.notscheduled), cls: "red" as const },
       { key: "scheduled", l: "Scheduled", v: String(counts.scheduled + counts.transit), cls: "blue" as const },
       { key: "delivered", l: "Delivered", v: String(counts.delivered), cls: "green" as const },
       { key: "rto", l: "RTO", v: String(counts.rto), cls: "amber" as const },
     ];
-  }, [shipments]);
+  }, [dateFiltered]);
 
-  const visible = filtered.slice(0, visibleCount);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const trackShipment = shipments.find((s) => s.id === trackId) || null;
   const scheduleShipment = shipments.find((s) => s.id === scheduleId) || null;
 
   function handleFilterChange(key: ShipStatus | "all") {
     setActiveFilter(key);
-    setVisibleCount(PAGE_SIZE);
+    setPage(1);
+  }
+
+  function handleSearch(value: string) {
+    setSearch(value);
+    setPage(1);
+  }
+
+  function handleDateRangeChange(value: DateRangeKey) {
+    setDateRange(value);
+    setPage(1);
   }
 
   async function handleLabel(orderId: string) {
@@ -145,15 +170,37 @@ export default function ShippingDashboard({ initialShipments, mock, bookingEnabl
 
         <ShipKpiGrid kpis={kpis} />
 
-        <div className="chips">
-          {FILTERS.map((f) => (
-            <div key={f.key} className={`chip ${f.key === activeFilter ? "active" : ""}`} onClick={() => handleFilterChange(f.key)}>
-              {f.label}
-            </div>
-          ))}
+        <div className="filters">
+          <div className="chipset">
+            {FILTERS.map((f) => (
+              <div key={f.key} className={`chip ${f.key === activeFilter ? "active" : ""}`} onClick={() => handleFilterChange(f.key)}>
+                {f.label}
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <select
+              className="search-box"
+              style={{ width: 150, cursor: "pointer" }}
+              value={dateRange}
+              onChange={(e) => handleDateRangeChange(e.target.value as DateRangeKey)}
+            >
+              {DATE_RANGES.map((r) => (
+                <option key={r.key} value={r.key}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+            <input
+              className="search-box"
+              placeholder="Search order / customer / city…"
+              value={search}
+              onChange={(e) => handleSearch(e.target.value)}
+            />
+          </div>
         </div>
         <div className="result-count">
-          {Math.min(visibleCount, filtered.length)} / {filtered.length} orders
+          {filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, filtered.length)} / {filtered.length} orders
         </div>
 
         <div>
@@ -172,9 +219,7 @@ export default function ShippingDashboard({ initialShipments, mock, bookingEnabl
           {visible.length === 0 && <div className="state-msg">No orders match this filter.</div>}
         </div>
 
-        <button className="load-more-btn" disabled={visibleCount >= filtered.length} onClick={() => setVisibleCount((v) => v + PAGE_SIZE)}>
-          {visibleCount >= filtered.length ? "All orders loaded" : `Load more (${filtered.length - visibleCount} remaining)`}
-        </button>
+        <Pagination page={page} totalPages={totalPages} onChange={setPage} />
 
         <footer>ONESCREEN · {shipments.length} ORDERS · {mock ? "SAMPLE DATA" : "LIVE FROM SHOPIFY + ICARRY"}</footer>
       </div>

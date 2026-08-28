@@ -2,7 +2,7 @@ services:
   - type: web
     name: onescreen-api
     runtime: node
-    plan: starter
+    plan: free
     rootDir: server
     buildCommand: npm install
     startCommand: npm start
@@ -10,6 +10,8 @@ services:
     envVars:
       - key: MOCK_MODE
         value: "false"
+      - key: SHOPIFY_ORDER_LOOKBACK_DAYS
+        value: "180"
       - key: SHOPIFY_SHOP_DOMAIN
         sync: false
       - key: SHOPIFY_API_VERSION

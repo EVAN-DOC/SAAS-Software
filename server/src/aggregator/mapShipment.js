@@ -21,6 +21,13 @@ function classifyShipStatus(icarryShipmentId, icarryTracking) {
   return "scheduled"; // manifested / pending pickup / processing / pickup scheduled
 }
 
+// See mapOrder.js's isManualOrder for why an absent/draft-order source_name
+// means this order was created by hand in Shopify admin, not through a real
+// checkout channel.
+function isManualOrder(shopifyOrder) {
+  return !shopifyOrder.source_name || shopifyOrder.source_name === "shopify_draft_order";
+}
+
 function orderValueLabel(orderType, shopifyOrder, formatINR) {
   const total = Number(shopifyOrder.current_total_price ?? shopifyOrder.total_price ?? 0);
   if (orderType !== "partial") return formatINR(total);
@@ -72,6 +79,7 @@ function mapShipment(record, formatINR) {
 
   return {
     id: shopifyOrder.name,
+    manual: isManualOrder(shopifyOrder),
     date: shopifyOrder.created_at,
     customer: [shopifyOrder.customer?.first_name, shopifyOrder.customer?.last_name].filter(Boolean).join(" ") || "Guest",
     loc: [shopifyOrder.shipping_address?.city, shopifyOrder.shipping_address?.province_code].filter(Boolean).join(", ") || "—",

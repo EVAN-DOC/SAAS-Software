@@ -9,7 +9,7 @@ import { Order } from "@/lib/types";
 import { computeKpis } from "@/lib/format";
 import { DateRangeKey, isWithinDateRange } from "@/lib/dateRange";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 15;
 
 interface Props {
   initialOrders: Order[];
@@ -22,7 +22,7 @@ export default function Dashboard({ initialOrders, mock, loadError }: Props) {
   const [active, setActive] = useState<FilterKey>("all");
   const [search, setSearch] = useState("");
   const [dateRange, setDateRange] = useState<DateRangeKey>("all");
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [page, setPage] = useState(1);
 
   // Date range scopes the whole page (list + KPI summary), matching how a
   // "reporting period" filter reads on a dashboard. Type chips and search
@@ -62,21 +62,22 @@ export default function Dashboard({ initialOrders, mock, loadError }: Props) {
   }, [dateFiltered, active, search]);
 
   const kpis = useMemo(() => computeKpis(dateFiltered), [dateFiltered]);
-  const visible = filtered.slice(0, visibleCount);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function handleFilterChange(key: FilterKey) {
     setActive(key);
-    setVisibleCount(PAGE_SIZE);
+    setPage(1);
   }
 
   function handleSearch(value: string) {
     setSearch(value);
-    setVisibleCount(PAGE_SIZE);
+    setPage(1);
   }
 
   function handleDateRangeChange(value: DateRangeKey) {
     setDateRange(value);
-    setVisibleCount(PAGE_SIZE);
+    setPage(1);
   }
 
   return (
@@ -109,15 +110,10 @@ export default function Dashboard({ initialOrders, mock, loadError }: Props) {
           onSearch={handleSearch}
           dateRange={dateRange}
           onDateRangeChange={handleDateRangeChange}
-          resultCount={`${Math.min(visibleCount, filtered.length)} / ${filtered.length} orders`}
+          resultCount={`${filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}-${Math.min(page * PAGE_SIZE, filtered.length)} / ${filtered.length} orders`}
         />
 
-        <OrderList
-          orders={visible}
-          visibleCount={visibleCount}
-          totalCount={filtered.length}
-          onLoadMore={() => setVisibleCount((v) => v + PAGE_SIZE)}
-        />
+        <OrderList orders={visible} page={page} totalPages={totalPages} onPageChange={setPage} />
 
         <footer>ONESCREEN · {orders.length} ORDERS · {mock ? "SAMPLE DATA" : "LIVE FROM SHOPIFY / ICARRY / CASHFREE"}</footer>
       </div>

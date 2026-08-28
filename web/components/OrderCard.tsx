@@ -21,14 +21,28 @@ const SYNC_CLS: Record<Order["sync"], string> = {
   none: "off",
 };
 
+function legValue(val: string): number {
+  return parseFloat(val.replace(/[₹,]/g, "")) || 0;
+}
+
 export default function OrderCard({ order }: { order: Order }) {
   const [open, setOpen] = useState(false);
+  const isCancelled = order.shipCat === "cancelled";
+  const isVoid = isCancelled || order.legs.every((l) => legValue(l.val) === 0);
 
   return (
     <div className={`order-card ${open ? "open" : ""}`}>
-      <button className="order-row" onClick={() => setOpen((v) => !v)}>
+      <button
+        className={`order-row ${isVoid ? "void" : ""}`}
+        onClick={isCancelled ? undefined : () => setOpen((v) => !v)}
+        disabled={isCancelled}
+      >
         <div>
-          <div className="oid">{order.id}</div>
+          <div className="oid">
+            {order.id}
+            {isVoid && <span className="void-tag">Void</span>}
+            {order.manual && <span className="manual-tag">Manual</span>}
+          </div>
           <div className="odate">{order.date}</div>
         </div>
         <div>
@@ -49,12 +63,12 @@ export default function OrderCard({ order }: { order: Order }) {
         <div>
           {order.legs.map((l, i) => (
             <div className="money-tag" key={i}>
-              <span className={`datebadge ${l.tag}`}>{l.tag === "confirmed" ? "✓" : "~"} {l.tag}</span>
+              <span className={`datebadge ${l.tag}`}>{l.tag === "confirmed" ? "✓ settled" : `~ ${l.tag}`}</span>
               <span className="money-amt">{l.val}</span>
             </div>
           ))}
         </div>
-        <div className="chevron">▸</div>
+        {!isCancelled && <div className="chevron">▸</div>}
       </button>
 
       <div className="order-detail">

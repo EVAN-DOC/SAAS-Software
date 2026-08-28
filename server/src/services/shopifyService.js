@@ -194,6 +194,31 @@ async function setIcarryReferenceMetafields(shopifyOrderId, { shipmentId, awb, c
   return data.metafieldsSet.metafields;
 }
 
+/**
+ * Reads back the icarry.shipment_id / icarry.awb metafields written by
+ * setIcarryReferenceMetafields() (via the status webhook, or the one-time
+ * pushIcarryShipmentIdsToShopify backfill). Shopify is the durable source of
+ * truth for this — unlike the local .data/icarry_shipment_map.json file, it
+ * isn't wiped by a redeploy. Returns nulls (not an error) when neither
+ * metafield has been set yet for this order.
+ */
+async function getIcarryReference(shopifyOrderId) {
+  const data = await graphql(
+    `#graphql
+      query getIcarryReference($id: ID!) {
+        order(id: $id) {
+          shipmentIdMeta: metafield(namespace: "icarry", key: "shipment_id") { value }
+          awbMeta: metafield(namespace: "icarry", key: "awb") { value }
+        }
+      }`,
+    { id: `gid://shopify/Order/${shopifyOrderId}` }
+  );
+  return {
+    shipmentId: data.order?.shipmentIdMeta?.value || null,
+    awb: data.order?.awbMeta?.value || null,
+  };
+}
+
 function parseNextLink(linkHeader) {
   if (!linkHeader) return null;
   const match = linkHeader
@@ -212,6 +237,7 @@ module.exports = {
   fetchOrderTransactions,
   findCashfreePayment,
   findOrderIdByName,
+  getIcarryReference,
   setIcarryReferenceMetafields,
   ensureIcarryShipmentIdMetafieldDefinition,
 };

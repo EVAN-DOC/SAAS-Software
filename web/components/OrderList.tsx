@@ -1,17 +1,15 @@
 import { Order } from "@/lib/types";
 import OrderCard from "./OrderCard";
+import Pagination from "./Pagination";
 
 interface Props {
   orders: Order[];
-  visibleCount: number;
-  totalCount: number;
-  onLoadMore: () => void;
+  page: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
 }
 
-export default function OrderList({ orders, visibleCount, totalCount, onLoadMore }: Props) {
-  const remaining = totalCount - visibleCount;
-  const done = visibleCount >= totalCount;
-
+export default function OrderList({ orders, page, totalPages, onPageChange }: Props) {
   return (
     <>
       <div className="order-list">
@@ -21,11 +19,7 @@ export default function OrderList({ orders, visibleCount, totalCount, onLoadMore
           orders.map((o) => <OrderCard order={o} key={o.id} />)
         )}
       </div>
-      <div style={{ textAlign: "center", marginTop: 16 }}>
-        <button className="load-more-btn" onClick={onLoadMore} disabled={done}>
-          {done ? "All orders loaded" : `Load 25 more (${remaining} remaining)`}
-        </button>
-      </div>
+      <Pagination page={page} totalPages={totalPages} onChange={onPageChange} />
     </>
   );
 }

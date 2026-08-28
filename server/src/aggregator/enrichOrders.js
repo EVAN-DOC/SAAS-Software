@@ -25,10 +25,22 @@ async function fetchEnrichedOrders() {
     shopifyOrders,
     async (shopifyOrder) => {
       // iCarry tracking needs their own shipment_id, which isn't derivable
-      // from Shopify data directly — resolved via a local mapping file built
-      // by scripts/importIcarryShipments.js from an iCarry shipments export,
-      // and kept current going forward by the status webhook.
-      const icarryShipmentId = icarryShipmentMap.getShipmentId(shopifyOrder.name);
+      // from Shopify data directly. Shopify's own icarry.shipment_id
+      // metafield (written by the status webhook, or the one-time
+      // pushIcarryShipmentIdsToShopify backfill) is the real, durable source
+      // — it survives a redeploy, unlike the local .data mapping file. Fall
+      // back to that local file (built by scripts/importIcarryShipments.js)
+      // only for orders that haven't had a metafield written yet.
+      let icarryShipmentId = null;
+      try {
+        const ref = await shopifyService.getIcarryReference(shopifyOrder.id);
+        icarryShipmentId = ref.shipmentId;
+      } catch {
+        icarryShipmentId = null;
+      }
+      if (!icarryShipmentId) {
+        icarryShipmentId = icarryShipmentMap.getShipmentId(shopifyOrder.name);
+      }
       let icarryTracking = null;
       if (icarryShipmentId) {
         try {

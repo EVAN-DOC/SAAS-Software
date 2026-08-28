@@ -82,6 +82,16 @@ header .sub{font-size:12.5px; color:var(--muted); margin-top:3px;}
 .load-more-btn:hover{border-color:var(--navy);}
 .load-more-btn:disabled{color:var(--faint); cursor:not-allowed;}
 
+.pagination{display:flex; align-items:center; justify-content:center; gap:6px; margin-top:16px; flex-wrap:wrap;}
+.page-btn{
+  background:var(--surface); border:1px solid var(--border); color:var(--ink); font-weight:600;
+  font-size:12px; padding:8px 13px; border-radius:8px; cursor:pointer; min-width:36px;
+}
+.page-btn:hover:not(:disabled){border-color:var(--navy);}
+.page-btn:disabled{color:var(--faint); cursor:not-allowed;}
+.page-btn.active{background:var(--navy); color:#fff; border-color:var(--navy);}
+.page-ellipsis{color:var(--faint); font-size:12px; padding:0 4px;}
+
 /* order list */
 .order-list{display:flex; flex-direction:column; gap:8px;}
 .order-card{
@@ -93,6 +103,20 @@ header .sub{font-size:12.5px; color:var(--muted); margin-top:3px;}
   background:none; border:none; width:100%; text-align:left; font:inherit; color:inherit;
 }
 .order-row:hover{background:var(--surface-2);}
+.order-row:disabled{cursor:default; pointer-events:none;}
+.order-row.void{opacity:0.65; background:var(--red-bg); box-shadow:inset 3px 0 0 var(--red);}
+.order-row.void:hover{opacity:0.9;}
+.order-row.void .items-txt, .order-row.void .money-amt, .order-row.void .cust-name{text-decoration:line-through;}
+.void-tag{
+  display:inline-flex; align-items:center; font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;
+  color:var(--red); background:var(--surface); border:1px solid var(--red); border-radius:4px;
+  padding:1px 6px; margin-left:6px; text-decoration:none;
+}
+.manual-tag{
+  display:inline-flex; align-items:center; font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;
+  color:var(--blue); background:var(--surface); border:1px solid var(--blue); border-radius:4px;
+  padding:1px 6px; margin-left:6px; text-decoration:none;
+}
 .oid{font-family:'IBM Plex Mono'; font-weight:600; font-size:12.5px;}
 .odate{font-size:10.5px; color:var(--faint); margin-top:2px;}
 .cust-name{font-weight:600; font-size:12.5px;}

@@ -42,7 +42,10 @@ export default function ShipmentCard({ shipment: o, onSchedule, onTrack, onLabel
     <div className={`card ${open ? "open" : ""}`} onClick={() => setOpen((v) => !v)}>
       <div className="card-top">
         <div>
-          <div className="oid">{o.id}</div>
+          <div className="oid">
+            {o.id}
+            {o.manual && <span className="manual-tag">Manual</span>}
+          </div>
           <div className="odate">{o.date}</div>
         </div>
         <div>

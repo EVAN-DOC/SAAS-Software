@@ -21,6 +21,7 @@ export interface OrderNet {
 
 export interface Order {
   id: string;
+  manual: boolean;
   date: string;
   customer: string;
   loc: string;
@@ -73,6 +74,7 @@ export interface ReturnPickup {
 
 export interface Shipment {
   id: string;
+  manual: boolean;
   date: string;
   customer: string;
   loc: string;
