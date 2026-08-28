@@ -2,6 +2,13 @@ const app = require("./app");
 const config = require("./config");
 const { getDashboard } = require("./aggregator/buildDashboard");
 
+app.get("/", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "SAAS Software API is running",
+  });
+});
+
 const server = app.listen(config.port, () => {
   console.log(`OneScreen API listening on http://localhost:${config.port} (mock mode: ${config.mockMode})`);
 
