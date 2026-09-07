@@ -36,6 +36,12 @@ module.exports = {
     orderLookbackDays: process.env.SHOPIFY_ORDER_LOOKBACK_DAYS
       ? Number(process.env.SHOPIFY_ORDER_LOOKBACK_DAYS)
       : undefined,
+    // A fixed calendar date/time (ISO 8601, e.g. "2026-09-07") — orders
+    // created before this are never synced, permanently, no matter how much
+    // time passes. This is the "service starts from when the client onboarded"
+    // cutoff, distinct from orderLookbackDays (which is a rolling window that
+    // keeps sliding forward). Takes priority over orderLookbackDays when set.
+    ordersSinceDate: process.env.SHOPIFY_ORDERS_SINCE_DATE || undefined,
   },
 
   cashfree: {

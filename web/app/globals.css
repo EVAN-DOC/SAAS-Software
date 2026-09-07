@@ -197,6 +197,9 @@ footer{text-align:center; color:var(--faint); font-size:10.5px; margin-top:24px;
 
 /* ---- Shipping page ---- */
 .card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 15px; margin-bottom:9px; cursor:pointer;}
+.card.void{opacity:0.65; background:var(--red-bg); box-shadow:inset 3px 0 0 var(--red); cursor:default;}
+.card.void:hover{opacity:0.9;}
+.card.void .items, .card.void .cust{text-decoration:line-through;}
 .chevron{font-size:9px; color:var(--faint); margin-left:6px; transition:transform .15s ease; display:inline-block;}
 .ship-detail{display:none; margin-top:12px; padding-top:12px; border-top:1px solid var(--border-soft);}
 .card.open .ship-detail{display:block;}

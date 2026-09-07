@@ -39,11 +39,15 @@ export default function ShipmentCard({ shipment: o, onSchedule, onTrack, onLabel
   }
 
   return (
-    <div className={`card ${open ? "open" : ""}`} onClick={() => setOpen((v) => !v)}>
+    <div
+      className={`card ${open ? "open" : ""} ${o.cancelled ? "void" : ""}`}
+      onClick={o.cancelled ? undefined : () => setOpen((v) => !v)}
+    >
       <div className="card-top">
         <div>
           <div className="oid">
             {o.id}
+            {o.cancelled && <span className="void-tag">Void</span>}
             {o.manual && <span className="manual-tag">Manual</span>}
           </div>
           <div className="odate">{o.date}</div>
@@ -64,23 +68,24 @@ export default function ShipmentCard({ shipment: o, onSchedule, onTrack, onLabel
           <span className={`badge ${o.shipStatus}`}>{STATUS_LABEL[o.shipStatus]}</span>
           <div className="courier-note">
             {courierNote}
-            <span className="chevron">{open ? "▾" : "▸"}</span>
+            {!o.cancelled && <span className="chevron">{open ? "▾" : "▸"}</span>}
           </div>
         </div>
-        {isNotScheduled ? (
-          <button className="btn schedule" onClick={stop(() => onSchedule(o.id))}>
-            Schedule Shipment
-          </button>
-        ) : (
-          <div className="btn-group">
-            <button className="btn track" onClick={stop(() => onTrack(o.id))}>
-              Track
+        {!o.cancelled &&
+          (isNotScheduled ? (
+            <button className="btn schedule" onClick={stop(() => onSchedule(o.id))}>
+              Schedule Shipment
             </button>
-            <button className="btn label" onClick={stop(() => onLabel(o.id))} disabled={labelLoading}>
-              {labelLoading ? "Loading…" : "⬇ Label"}
-            </button>
-          </div>
-        )}
+          ) : (
+            <div className="btn-group">
+              <button className="btn track" onClick={stop(() => onTrack(o.id))}>
+                Track
+              </button>
+              <button className="btn label" onClick={stop(() => onLabel(o.id))} disabled={labelLoading}>
+                {labelLoading ? "Loading…" : "⬇ Label"}
+              </button>
+            </div>
+          ))}
       </div>
 
       <div className="ship-detail">

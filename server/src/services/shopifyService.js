@@ -39,19 +39,26 @@ function client() {
 
 /**
  * Pulls orders, walking Shopify's Link-header cursor pagination (page_info)
- * until exhausted. Pass `days` to only pull orders created in that window;
- * omit it (the default) to pull the store's entire order history.
+ * until exhausted. `config.shopify.ordersSinceDate` (a fixed calendar cutoff,
+ * if set) always wins over the rolling `days` window — see config.js. Pass
+ * `days` to only pull orders created in that rolling window; omit both to
+ * pull the store's entire order history.
  * https://shopify.dev/docs/api/admin-rest/latest/resources/order
  */
 async function fetchRecentOrders(days) {
   const http = client();
+  const { ordersSinceDate } = config.shopify;
 
   let url = "/orders.json";
   let params = {
     status: "any",
     limit: 250,
     order: "created_at desc",
-    ...(days ? { created_at_min: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString() } : {}),
+    ...(ordersSinceDate
+      ? { created_at_min: ordersSinceDate }
+      : days
+      ? { created_at_min: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString() }
+      : {}),
   };
 
   const orders = [];

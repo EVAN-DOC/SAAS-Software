@@ -9,6 +9,12 @@ const SHIP_STATUS_LABELS = {
   rto: "RTO",
 };
 
+/** True when iCarry's own tracking status is itself a cancellation/void — same text check mapOrder.js's mapTrackingStatus applies, kept in sync deliberately. */
+function isCourierCancelled(icarryTracking) {
+  const status = (icarryTracking?.status || "").toLowerCase();
+  return status.includes("cancel") || status === "voided";
+}
+
 /** Buckets iCarry's real status vocabulary into this page's 5-state model. */
 function classifyShipStatus(icarryShipmentId, icarryTracking) {
   if (!icarryShipmentId) return "notscheduled";
@@ -16,7 +22,7 @@ function classifyShipStatus(icarryShipmentId, icarryTracking) {
   if (!status) return "scheduled"; // booked, but we don't have a status yet
   if (status.includes("delivered")) return "delivered";
   if (status.includes("returned to origin") || status.includes("pending return") || status.includes("lost") || status.includes("damaged")) return "rto";
-  if (status.includes("cancel") || status === "voided") return "rto"; // closest bucket in this page's fixed vocabulary
+  if (isCourierCancelled(icarryTracking)) return "rto"; // closest bucket in this page's fixed vocabulary
   if (status.includes("transit") || status.includes("shipped") || status.includes("out for delivery")) return "transit";
   return "scheduled"; // manifested / pending pickup / processing / pickup scheduled
 }
@@ -80,6 +86,12 @@ function mapShipment(record, formatINR) {
   return {
     id: shopifyOrder.name,
     manual: isManualOrder(shopifyOrder),
+    // Matches exactly what makes mapOrder.js's shipCat become "cancelled" —
+    // either the Shopify order itself was cancelled, or iCarry's own tracking
+    // status is itself a cancellation (which classifyShipStatus deliberately
+    // folds into "rto" above, since this page has no separate bucket for it).
+    // Surfaced here so the UI can still dim/void the row either way.
+    cancelled: Boolean(shopifyOrder.cancelled_at) || isCourierCancelled(icarryTracking),
     date: shopifyOrder.created_at,
     customer: [shopifyOrder.customer?.first_name, shopifyOrder.customer?.last_name].filter(Boolean).join(" ") || "Guest",
     loc: [shopifyOrder.shipping_address?.city, shopifyOrder.shipping_address?.province_code].filter(Boolean).join(", ") || "—",

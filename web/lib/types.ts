@@ -75,6 +75,7 @@ export interface ReturnPickup {
 export interface Shipment {
   id: string;
   manual: boolean;
+  cancelled: boolean;
   date: string;
   customer: string;
   loc: string;
