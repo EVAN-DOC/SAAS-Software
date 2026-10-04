@@ -25,10 +25,21 @@ module.exports = {
     clientSecret: process.env.SHOPIFY_CLIENT_SECRET,
     // write_orders is required to push iCarry shipment references (shipment_id,
     // awb, courier, tracking url) onto the order as metafields — see
-    // shopifyService.js's setIcarryReferenceMetafields(). Adding it to an
-    // already-installed app requires re-visiting /auth/shopify to re-consent;
-    // the existing stored token keeps its old (narrower) scopes until then.
-    scopes: process.env.SHOPIFY_SCOPES || "read_orders,read_customers,read_fulfillments,write_orders",
+    // shopifyService.js's setIcarryReferenceMetafields(). Actually fulfilling an
+    // order with real tracking info (fulfillOrderWithTracking(), via the
+    // FulfillmentOrder-based API) needs write_merchant_managed_fulfillment_orders
+    // specifically — confirmed live: plain write_fulfillments alone gets a 403
+    // "api_client does not have the required permission(s)" on that endpoint,
+    // even though it's enough for the legacy direct-fulfillment endpoint. Adding
+    // any of these to an already-installed app requires re-visiting /auth/shopify
+    // to re-consent (and, since this app uses Shopify's config-managed scope flow
+    // — see one-screen-dashboard/shopify.app.toml's use_legacy_install_flow —
+    // that TOML's own `scopes` list has to be updated and deployed too, or
+    // Shopify won't actually grant the new scope no matter what's requested
+    // here); the existing stored token keeps its old (narrower) scopes until then.
+    scopes:
+      process.env.SHOPIFY_SCOPES ||
+      "read_orders,read_customers,read_fulfillments,write_orders,write_fulfillments,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders",
     redirectUri: process.env.SHOPIFY_REDIRECT_URI || `http://localhost:${process.env.PORT || 4000}/auth/shopify/callback`,
     // Unset (default) = pull the store's entire order history. Set this once
     // your order count grows large enough that every dashboard load re-fetching

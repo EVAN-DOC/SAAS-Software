@@ -4,6 +4,7 @@ const config = require("./config");
 const ordersRouter = require("./routes/orders");
 const kpisRouter = require("./routes/kpis");
 const shipmentsRouter = require("./routes/shipments");
+const manualOrdersRouter = require("./routes/manualOrders");
 const shopifyAuthRouter = require("./routes/shopifyAuth");
 const icarryWebhooksRouter = require("./routes/icarryWebhooks");
 const { isWarm } = require("./lib/cache");
@@ -23,6 +24,7 @@ app.get("/health", (req, res) =>
 app.use("/api/orders", ordersRouter);
 app.use("/api/kpis", kpisRouter);
 app.use("/api/shipments", shipmentsRouter);
+app.use("/api/manual-orders", manualOrdersRouter);
 app.use("/auth", shopifyAuthRouter);
 app.use("/webhooks/icarry", icarryWebhooksRouter);
 

@@ -1,4 +1,18 @@
-import { BookResponse, DashboardResponse, EstimateResponse, LabelResponse, ReturnPickupResponse, ShippingListResponse } from "./types";
+import {
+  BookResponse,
+  DashboardResponse,
+  EstimateResponse,
+  LabelResponse,
+  ManualBookResponse,
+  ManualConsignee,
+  ManualOrderMeta,
+  ManualOrderTag,
+  ManualParcel,
+  ManualPaymentType,
+  ManualShipMode,
+  ReturnPickupResponse,
+  ShippingListResponse,
+} from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
 
@@ -70,5 +84,77 @@ export async function scheduleReturnPickup(orderId: string): Promise<ReturnPicku
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data?.error || `Return pickup scheduling failed (${res.status})`);
+  return data;
+}
+
+// ---- Manual Order (orders that never existed in Shopify — see MAN page) ----
+
+export async function fetchManualOrderMeta(): Promise<ManualOrderMeta> {
+  const res = await fetch(`${API_BASE_URL}/api/manual-orders/meta`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Couldn't load manual-order settings (${res.status})`);
+  return res.json();
+}
+
+export async function fetchNextManualReference(tag: ManualOrderTag): Promise<string> {
+  const res = await fetch(`${API_BASE_URL}/api/manual-orders/next-reference?tag=${encodeURIComponent(tag)}`, { cache: "no-store" });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || `Couldn't get next reference (${res.status})`);
+  return data.reference;
+}
+
+export async function fetchManualEstimate(input: {
+  pincode: string;
+  weightGrams: number;
+  lengthCm: number;
+  breadthCm: number;
+  heightCm: number;
+  declaredValue: number;
+  mode: ManualShipMode;
+  isCod: boolean;
+}): Promise<EstimateResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/manual-orders/estimate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || `Estimate failed (${res.status})`);
+  return data;
+}
+
+/** REAL, consequential action — creates an actual shipment with a courier and spends money. Not a preview. */
+export async function bookManualOrder(input: {
+  tag: ManualOrderTag;
+  note: string | null;
+  consignee: ManualConsignee;
+  parcel: ManualParcel;
+  mode: ManualShipMode;
+  payment: { type: ManualPaymentType; codAmount?: number };
+  courierId: string;
+  courierName: string;
+  returnAddressId?: string;
+  rtoAddressId?: string;
+}): Promise<ManualBookResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/manual-orders/book`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || `Booking failed (${res.status})`);
+  return data;
+}
+
+export async function fetchManualLabel(reference: string): Promise<LabelResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/manual-orders/${encodeURIComponent(reference)}/label`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || `Label fetch failed (${res.status})`);
+  return data;
+}
+
+export async function fetchManualTracking(reference: string): Promise<{ status?: string; error?: string }> {
+  const res = await fetch(`${API_BASE_URL}/api/manual-orders/${encodeURIComponent(reference)}/track`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || `Tracking fetch failed (${res.status})`);
   return data;
 }

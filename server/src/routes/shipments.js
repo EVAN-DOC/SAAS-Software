@@ -134,6 +134,26 @@ router.post("/:orderId/book", async (req, res, next) => {
       } catch (metaErr) {
         console.warn(`[shopify] Couldn't write iCarry reference metafields for ${shopifyOrder.name}: ${metaErr.message}`);
       }
+
+      // Also surfaces the tracking number/carrier in Shopify's own native
+      // tracking UI (the "Add tracking" area on the order), not just the
+      // admin-only metafield above — this is what the customer-facing order
+      // status page and Shopify's own order list actually show. Best-effort,
+      // same reasoning as the metafield write: the iCarry booking already
+      // happened and is real regardless of whether this Shopify-side step
+      // succeeds. Needs an AWB to be worth doing at all.
+      if (result.awb) {
+        try {
+          await shopifyService.fulfillOrderWithTracking(shopifyOrder.id, {
+            trackingNumber: String(result.awb),
+            trackingCompany: result.courier_name || "iCarry",
+            trackingUrl: result.tracking_url,
+            notifyCustomer: false,
+          });
+        } catch (fulfillErr) {
+          console.warn(`[shopify] Couldn't fulfill ${shopifyOrder.name} with tracking info: ${fulfillErr.message}`);
+        }
+      }
     }
 
     res.json(result);

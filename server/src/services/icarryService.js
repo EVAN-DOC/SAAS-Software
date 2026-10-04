@@ -166,7 +166,7 @@ async function getEstimate({ lengthCm, breadthCm, heightCm, weightGrams, originP
  * from your iCarry account (Settings > My Addresses > Pick up address) —
  * see config.icarry.pickupAddressId / ICARRY_PICKUP_ADDRESS_ID.
  */
-async function bookShipment({ pickupAddressId, clientOrderId, courierId, consignee, parcel, mode = "surface" }) {
+async function bookShipment({ pickupAddressId, clientOrderId, courierId, consignee, parcel, mode = "surface", returnAddressId, rtoAddressId }) {
   const path = mode === "air" ? "/api_add_shipment_air" : "/api_add_shipment_surface";
   return post(path, {
     pickup_address_id: pickupAddressId,
@@ -174,6 +174,9 @@ async function bookShipment({ pickupAddressId, clientOrderId, courierId, consign
     courier_id: courierId,
     consignee,
     parcel,
+    // Optional — iCarry defaults both to the pickup address when omitted.
+    ...(returnAddressId ? { return_address_id: returnAddressId } : {}),
+    ...(rtoAddressId ? { rto_address_id: rtoAddressId } : {}),
   });
 }
 

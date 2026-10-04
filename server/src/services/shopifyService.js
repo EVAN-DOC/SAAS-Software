@@ -226,6 +226,77 @@ async function getIcarryReference(shopifyOrderId) {
   };
 }
 
+/**
+ * Current Admin API fulfillment creation is routed through FulfillmentOrder
+ * ids, not the order id directly — this fetches those for a given order.
+ * https://shopify.dev/docs/api/admin-rest/latest/resources/fulfillmentorder
+ */
+async function fetchFulfillmentOrders(shopifyOrderId) {
+  const http = client();
+  const res = await http.get(`/orders/${shopifyOrderId}/fulfillment_orders.json`);
+  return res.data.fulfillment_orders;
+}
+
+/** Existing fulfillments on an order — need these to tell "already fulfilled, just missing tracking" apart from "not fulfilled yet". */
+async function fetchFulfillments(shopifyOrderId) {
+  const http = client();
+  const res = await http.get(`/orders/${shopifyOrderId}/fulfillments.json`);
+  return res.data.fulfillments;
+}
+
+/**
+ * Marks the order fulfilled in Shopify with real tracking info — this is
+ * what makes the tracking number and carrier show up on the order's own
+ * page, in the same place as Shopify's native "Add tracking" button (unlike
+ * the icarry.* metafields written by setIcarryReferenceMetafields(), which
+ * are admin-only and invisible to the customer). Requires the
+ * write_fulfillments scope — see config.js's note on that and on this app's
+ * config-managed scope flow (one-screen-dashboard/shopify.app.toml).
+ *
+ * Two real cases, confirmed live against this store's own orders — a plain
+ * "create a fulfillment" call only covers the first:
+ *  1. Order isn't fulfilled yet (booked fresh through this app) — creates a
+ *     new fulfillment covering every open fulfillment order, with tracking
+ *     attached from the start.
+ *  2. Order is ALREADY fulfilled with no tracking (confirmed live: orders
+ *     shipped via iCarry's own Shopify connector land here — fulfilled, but
+ *     Shopify's own "Add tracking" fields sit empty) — updates that existing
+ *     fulfillment's tracking instead, since Shopify refuses to create a new
+ *     fulfillment when nothing is left open.
+ * Returns null (not an error) if there's truly nothing to do (e.g. cancelled).
+ */
+async function fulfillOrderWithTracking(shopifyOrderId, { trackingNumber, trackingCompany, trackingUrl, notifyCustomer = false }) {
+  const http = client();
+  const trackingInfo = {
+    number: trackingNumber,
+    company: trackingCompany,
+    ...(trackingUrl ? { url: trackingUrl } : {}),
+  };
+
+  const existing = await fetchFulfillments(shopifyOrderId);
+  const untracked = existing.find((f) => f.status !== "cancelled" && !f.tracking_number);
+  if (untracked) {
+    const res = await http.post(`/fulfillments/${untracked.id}/update_tracking.json`, {
+      fulfillment: { tracking_info: trackingInfo, notify_customer: notifyCustomer },
+    });
+    return res.data.fulfillment;
+  }
+  if (existing.some((f) => f.status !== "cancelled")) return null; // already fulfilled and already tracked — nothing to do
+
+  const fulfillmentOrders = await fetchFulfillmentOrders(shopifyOrderId);
+  const openOrders = fulfillmentOrders.filter((fo) => fo.status === "open" || fo.status === "in_progress");
+  if (!openOrders.length) return null;
+
+  const res = await http.post("/fulfillments.json", {
+    fulfillment: {
+      line_items_by_fulfillment_order: openOrders.map((fo) => ({ fulfillment_order_id: fo.id })),
+      tracking_info: trackingInfo,
+      notify_customer: notifyCustomer,
+    },
+  });
+  return res.data.fulfillment;
+}
+
 function parseNextLink(linkHeader) {
   if (!linkHeader) return null;
   const match = linkHeader
@@ -247,4 +318,5 @@ module.exports = {
   getIcarryReference,
   setIcarryReferenceMetafields,
   ensureIcarryShipmentIdMetafieldDefinition,
+  fulfillOrderWithTracking,
 };

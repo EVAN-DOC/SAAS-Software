@@ -149,3 +149,48 @@ export interface ReturnPickupResponse extends ReturnPickup {
   success?: string;
   error?: string;
 }
+
+// ---- Manual Order (orders that never existed in Shopify — see MAN page) ----
+
+export type ManualOrderTag = "INF" | "FAM" | "COMP" | "CUST";
+export type ManualShipMode = "S" | "A" | "H";
+export type ManualPaymentType = "NONE" | "COD";
+
+export interface ManualOrderMeta {
+  mock: boolean;
+  bookingEnabled: boolean;
+  pickupAddressId: string | null;
+  originPincode: string | null;
+  tags: { tag: ManualOrderTag; label: string }[];
+}
+
+export interface ManualConsignee {
+  name: string;
+  mobile: string;
+  altMobile?: string;
+  email?: string;
+  address: string;
+  city: string;
+  state: string;
+  pincode: string;
+}
+
+export interface ManualParcel {
+  contents: string;
+  weightGrams: number;
+  declaredValue: number;
+  lengthCm: number;
+  breadthCm: number;
+  heightCm: number;
+}
+
+export interface ManualBookResponse {
+  success?: string;
+  error?: string;
+  reference?: string;
+  shipment_id?: number | string;
+  courier_id?: number | string;
+  courier_name?: string;
+  awb?: string | number;
+  tracking_url?: string;
+}
