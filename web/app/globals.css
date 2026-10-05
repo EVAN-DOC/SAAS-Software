@@ -140,6 +140,7 @@ header .sub{font-size:12.5px; color:var(--muted); margin-top:3px;}
 .money-tag{font-size:10px; margin-top:3px; display:flex; align-items:center; gap:5px;}
 .money-tag .datebadge{font-family:'IBM Plex Mono'; padding:1px 6px; border-radius:4px; font-size:9.5px;}
 .money-tag .confirmed{background:var(--green-bg); color:var(--green);}
+.money-tag .pending{background:var(--blue-bg); color:var(--blue);}
 .money-tag .estimated{background:var(--amber-bg); color:var(--amber);}
 .chevron{font-size:11px; color:var(--faint); text-align:right; transition:transform .15s ease;}
 .order-card.open .chevron{transform:rotate(90deg);}
@@ -154,7 +155,7 @@ header .sub{font-size:12.5px; color:var(--muted); margin-top:3px;}
 .leg .ln{font-size:12px; font-weight:600;}
 .leg .ld{font-size:10.5px; color:var(--faint); margin-top:2px; max-width:230px;}
 .leg .lv{font-family:'IBM Plex Mono'; font-weight:600; font-size:12.5px; text-align:right; white-space:nowrap;}
-.leg .lv.g{color:var(--green);} .leg .lv.a{color:var(--amber);} .leg .lv.r{color:var(--red);} .leg .lv.p{color:var(--purple);}
+.leg .lv.g{color:var(--green);} .leg .lv.a{color:var(--amber);} .leg .lv.r{color:var(--red);} .leg .lv.p{color:var(--blue);}
 .net-line{margin-top:10px; padding:9px 12px; border-radius:8px; font-size:12px; font-weight:600; display:flex; justify-content:space-between;}
 .net-line.pos{background:var(--green-bg); color:var(--green);}
 .net-line.neg{background:var(--red-bg); color:var(--red);}
@@ -227,6 +228,7 @@ footer{text-align:center; color:var(--faint); font-size:10.5px; margin-top:24px;
 .btn.schedule{background:var(--navy); color:#fff;}
 .btn.label{background:var(--green); color:#fff;}
 .btn.track{background:var(--surface); color:var(--navy); border:1.5px solid var(--navy);}
+.btn.cancel{background:var(--surface); color:var(--red); border:1.5px solid var(--red);}
 .btn:disabled{opacity:0.6; cursor:not-allowed;}
 
 .btn.return-pickup{display:inline-flex; align-items:center; gap:6px; width:auto; margin-top:12px; padding:9px 16px; background:var(--purple); color:#fff; font-size:12px; border-radius:20px;}

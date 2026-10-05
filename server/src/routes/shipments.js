@@ -25,6 +25,30 @@ async function findEnrichedOrder(orderId) {
   return records.find((r) => r.shopifyOrder.name === orderId) || null;
 }
 
+/**
+ * Same priority order as enrichOrders.js: Shopify's icarry.shipment_id
+ * metafield first (durable — survives a redeploy, unlike the local file),
+ * falling back to the local .data map. The /label, /return-pickup, and
+ * /cancel routes below used to check ONLY the local map directly — meaning
+ * they'd silently 404 on a host whose local file doesn't have an entry
+ * (e.g. a fresh Render deploy) even when the shipment is perfectly
+ * resolvable via Shopify, exactly as the main order/shipment list already
+ * does. Confirmed live: this was the actual cause of "label works locally,
+ * not after deploying."
+ */
+async function resolveShipmentId(orderName) {
+  try {
+    const shopifyOrderId = await shopifyService.findOrderIdByName(orderName);
+    if (shopifyOrderId) {
+      const ref = await shopifyService.getIcarryReference(shopifyOrderId);
+      if (ref.shipmentId) return ref.shipmentId;
+    }
+  } catch {
+    // fall through to the local map
+  }
+  return icarryShipmentMap.getShipmentId(orderName);
+}
+
 // Real courier options + cost for this order's actual parcel — read-only.
 router.post("/:orderId/estimate", async (req, res, next) => {
   try {
@@ -165,7 +189,7 @@ router.post("/:orderId/book", async (req, res, next) => {
 // Read-only — retrieves the label for an already-booked shipment.
 router.get("/:orderId/label", async (req, res, next) => {
   try {
-    const shipmentId = icarryShipmentMap.getShipmentId(req.params.orderId);
+    const shipmentId = await resolveShipmentId(req.params.orderId);
     if (!shipmentId) return res.status(404).json({ error: "This order has no iCarry shipment yet" });
     const result = await icarryService.printShipmentLabel(shipmentId);
     res.json(result);
@@ -195,7 +219,7 @@ router.post("/:orderId/return-pickup", async (req, res, next) => {
       return res.json({ success: "Successfully generated reverse pickup shipment (mock)", ...info });
     }
 
-    const shipmentId = icarryShipmentMap.getShipmentId(orderId);
+    const shipmentId = await resolveShipmentId(orderId);
     if (!shipmentId) return res.status(404).json({ error: "This order has no iCarry shipment yet" });
 
     const result = await icarryService.reverseShipment(shipmentId);
@@ -214,6 +238,32 @@ router.post("/:orderId/return-pickup", async (req, res, next) => {
     invalidate("shipping");
 
     res.json({ ...result, ...info });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// REAL, consequential action — cancels an already-booked shipment with the
+// courier. See icarryService.cancelShipment's doc comment: the endpoint
+// itself is NOT confirmed against iCarry's docs or tested live, unlike
+// every other action in this file. Doesn't touch the local
+// icarryShipmentMap/icarryAwbMap entries — once iCarry's own TRACK status
+// reflects the cancellation, mapShipment.js's existing isCourierCancelled()
+// check already buckets it into the "Void" treatment automatically, so
+// there's nothing else here that needs updating by hand.
+router.post("/:orderId/cancel", async (req, res, next) => {
+  try {
+    const shipmentId = await resolveShipmentId(req.params.orderId);
+    if (!shipmentId) return res.status(404).json({ error: "This order has no iCarry shipment yet" });
+
+    const result = await icarryService.cancelShipment(shipmentId);
+    if (result?.error) return res.status(400).json({ error: result.error });
+
+    invalidate("enriched");
+    invalidate("dashboard");
+    invalidate("shipping");
+
+    res.json(result);
   } catch (err) {
     next(err);
   }

@@ -74,21 +74,26 @@ function itemsSummary(shopifyOrder) {
 function buildLegs({ orderType, grossTotal, cashfreePayment, cashfreeSettlement, icarryRemit, shipCat }) {
   const legs = [];
 
-  // Two levels of confidence: `transfer_utr` is independent proof the money
-  // actually hit the bank; failing that, Cashfree/Shopify reporting the
-  // payment captured is still real (just not bank-settlement-verified) —
-  // see shopifyService.findCashfreePayment() for why not every order has a
-  // path to the stronger signal.
+  // Three real states, not two: `transfer_utr` is independent proof the
+  // money actually hit the bank ("confirmed" — only state that should ever
+  // read as fully settled); short of that, Cashfree/Shopify reporting the
+  // payment captured is real money secured, but Cashfree's own settlement
+  // cycle (T+2, sometimes T+3) hasn't paid it into the bank yet — that's
+  // "pending", not "confirmed", even though it used to be shown identically
+  // to a real bank settlement. See shopifyService.findCashfreePayment() for
+  // why not every order has a path to the strongest (bank-verified) signal.
   function cashfreeStatus() {
     const settledToBank = Boolean(cashfreeSettlement?.transfer_utr);
     const captured =
       settledToBank || cashfreePayment?.payment_status === "SUCCESS" || cashfreePayment?.order_status === "PAID";
+    const tag = settledToBank ? "confirmed" : captured ? "pending" : "estimated";
+    const cls = settledToBank ? "g" : captured ? "p" : "a";
     const note = settledToBank
       ? `Settled to bank · UTR ${cashfreeSettlement.transfer_utr}`
       : captured
-      ? "Captured via Cashfree · bank settlement not independently verified"
+      ? "Captured via Cashfree · not yet settled to bank (T+2/T+3 cycle)"
       : "Expected settlement per Cashfree T+2 cycle";
-    return { settledToBank, captured, note };
+    return { settledToBank, captured, tag, cls, note };
   }
 
   // icarryRemit is the real "COD REMITTANCE" response shape (confirmed live,
@@ -113,15 +118,15 @@ function buildLegs({ orderType, grossTotal, cashfreePayment, cashfreeSettlement,
     const fee = cashfreeSettlement?.settlement_amount != null
       ? grossTotal - cashfreeSettlement.settlement_amount
       : null;
-    const { captured, note } = cashfreeStatus();
+    const { tag, cls, note } = cashfreeStatus();
     legs.push({
       name: "Prepaid — Full Order",
       amt: fee != null
         ? `${formatINR(grossTotal)} gross · −${formatINR(fee)} PG fee`
         : `${formatINR(grossTotal)} gross`,
       val: formatINR(cashfreeSettlement?.settlement_amount ?? cashfreePayment?.order_amount ?? grossTotal),
-      cls: captured ? "g" : "a",
-      tag: captured ? "confirmed" : "estimated",
+      cls,
+      tag,
       note,
     });
   }
@@ -145,14 +150,14 @@ function buildLegs({ orderType, grossTotal, cashfreePayment, cashfreeSettlement,
     // only if no Cashfree transaction was found on the order at all.
     const advance = cashfreePayment?.order_amount ?? grossTotal * 0.25;
     const balance = grossTotal - advance;
-    const { captured, note: advanceNote } = cashfreeStatus();
+    const { captured, tag, cls, note: advanceNote } = cashfreeStatus();
     const { remitted: balRemitted, note: balNote } = icarryRemitStatus("Awaiting dispatch / delivery");
     legs.push({
       name: "Advance (Prepaid)",
       amt: `${formatINR(advance)} gross`,
       val: formatINR(cashfreeSettlement?.settlement_amount ?? advance),
-      cls: captured ? "g" : "a",
-      tag: captured ? "confirmed" : "estimated",
+      cls,
+      tag,
       note: captured ? `${advanceNote} · already secured regardless of outcome` : advanceNote,
     });
     legs.push({

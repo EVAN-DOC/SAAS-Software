@@ -19,7 +19,11 @@ export function computeKpis(orders: Order[]): Kpi[] {
     0
   );
   const pendingEst = orders.reduce(
-    (s, o) => s + o.legs.filter((l) => l.tag === "estimated" && (l.cls === "a" || l.cls === "p")).reduce((a, l) => a + numFromVal(l.val), 0),
+    (s, o) =>
+      s +
+      o.legs
+        .filter((l) => l.tag === "estimated" || l.tag === "pending")
+        .reduce((a, l) => a + numFromVal(l.val), 0),
     0
   );
   const alertCount = orders.filter((o) => o.wa).length;

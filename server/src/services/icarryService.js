@@ -206,6 +206,20 @@ async function getRemittanceDetail(shipmentId) {
   return post("/api_get_remittance_detail", { shipment_id: shipmentId });
 }
 
+/**
+ * CANCEL Shipment — REAL, consequential action, referenced but never
+ * implemented elsewhere in this file (see bookShipment's doc comment: "not
+ * reversible via a simple undo — cancelShipment exists but RTO freight may
+ * still apply once picked up"). UNLIKE every other endpoint in this file,
+ * this path is NOT confirmed against iCarry's API Document v17.0 or tested
+ * live — it's a best guess following this file's own naming convention
+ * (api_add_shipment_surface, api_add_reverse_shipment, etc.). Do not treat
+ * this as reliable until it's been verified against a real cancellation.
+ */
+async function cancelShipment(shipmentId) {
+  return post("/api_cancel_shipment", { shipment_id: shipmentId });
+}
+
 // Numeric codes from SYNC Shipment STATUS's documented status table.
 const NUMERIC_STATUS = {
   1: "Pending Pickup",
@@ -250,5 +264,6 @@ module.exports = {
   printShipmentLabel,
   reverseShipment,
   getRemittanceDetail,
+  cancelShipment,
   mapTrackingStatus,
 };

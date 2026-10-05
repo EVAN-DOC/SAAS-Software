@@ -63,6 +63,10 @@ export default function Filters({ active, onChange, search, onSearch, dateRange,
           Confirmed
         </span>
         <span>
+          <span className="dot" style={{ background: "var(--blue)" }} />
+          Not Settled
+        </span>
+        <span>
           <span className="dot" style={{ background: "var(--amber)" }} />
           Estimated
         </span>

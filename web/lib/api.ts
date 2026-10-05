@@ -87,6 +87,17 @@ export async function scheduleReturnPickup(orderId: string): Promise<ReturnPicku
   return data;
 }
 
+/** REAL, consequential action — cancels an already-booked shipment with the courier. */
+export async function cancelShipment(orderId: string): Promise<{ success?: string; error?: string }> {
+  const res = await fetch(`${API_BASE_URL}/api/shipments/${encodeURIComponent(orderId)}/cancel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || `Cancel failed (${res.status})`);
+  return data;
+}
+
 // ---- Manual Order (orders that never existed in Shopify — see MAN page) ----
 
 export async function fetchManualOrderMeta(): Promise<ManualOrderMeta> {

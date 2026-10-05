@@ -1,7 +1,7 @@
 export type OrderType = "prepaid" | "cod" | "partial";
 export type ShipCat = "delivered" | "transit" | "rto" | "ndr" | "unful" | "cancelled";
 export type SyncStatus = "paid+tracking" | "tracking" | "none";
-export type LegTag = "confirmed" | "estimated";
+export type LegTag = "confirmed" | "pending" | "estimated";
 export type LegCls = "g" | "a" | "r" | "p";
 
 export interface OrderLeg {

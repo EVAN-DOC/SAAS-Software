@@ -21,11 +21,23 @@ interface Props {
   onTrack: (id: string) => void;
   onLabel: (id: string) => void;
   onScheduleReturn: (id: string) => void;
+  onCancel: (id: string) => void;
   labelLoading: boolean;
   returnLoading: boolean;
+  cancelLoading: boolean;
 }
 
-export default function ShipmentCard({ shipment: o, onSchedule, onTrack, onLabel, onScheduleReturn, labelLoading, returnLoading }: Props) {
+export default function ShipmentCard({
+  shipment: o,
+  onSchedule,
+  onTrack,
+  onLabel,
+  onScheduleReturn,
+  onCancel,
+  labelLoading,
+  returnLoading,
+  cancelLoading,
+}: Props) {
   const [open, setOpen] = useState(false);
   const isNotScheduled = o.shipStatus === "notscheduled";
   const isDelivered = o.shipStatus === "delivered";
@@ -84,6 +96,19 @@ export default function ShipmentCard({ shipment: o, onSchedule, onTrack, onLabel
               <button className="btn label" onClick={stop(() => onLabel(o.id))} disabled={labelLoading}>
                 {labelLoading ? "Loading…" : "⬇ Label"}
               </button>
+              {!isDelivered && (
+                <button
+                  className="btn cancel"
+                  onClick={stop(() => {
+                    if (window.confirm(`Cancel the booked shipment for ${o.id}? This notifies the courier and can't be undone from here.`)) {
+                      onCancel(o.id);
+                    }
+                  })}
+                  disabled={cancelLoading}
+                >
+                  {cancelLoading ? "Cancelling…" : "✕ Cancel Shipment"}
+                </button>
+              )}
             </div>
           ))}
       </div>

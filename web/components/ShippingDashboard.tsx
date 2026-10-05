@@ -9,7 +9,7 @@ import TrackModal from "./TrackModal";
 import Toast from "./Toast";
 import Pagination from "./Pagination";
 import { Shipment, ShipStatus } from "@/lib/types";
-import { fetchLabel, scheduleReturnPickup } from "@/lib/api";
+import { cancelShipment, fetchLabel, scheduleReturnPickup } from "@/lib/api";
 import { DATE_RANGES, DateRangeKey, isWithinDateRange } from "@/lib/dateRange";
 
 const PAGE_SIZE = 15;
@@ -40,6 +40,7 @@ export default function ShippingDashboard({ initialShipments, mock, bookingEnabl
   const [scheduleId, setScheduleId] = useState<string | null>(null);
   const [labelLoadingId, setLabelLoadingId] = useState<string | null>(null);
   const [returnLoadingId, setReturnLoadingId] = useState<string | null>(null);
+  const [cancelLoadingId, setCancelLoadingId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   function showToast(msg: string) {
@@ -139,6 +140,23 @@ export default function ShippingDashboard({ initialShipments, mock, bookingEnabl
     }
   }
 
+  async function handleCancel(orderId: string) {
+    setCancelLoadingId(orderId);
+    try {
+      await cancelShipment(orderId);
+      // The authoritative state (e.g. iCarry's TRACK status actually
+      // reporting "Cancelled") only shows up on the next real sync — this
+      // just reflects that cancellation was requested and accepted so the
+      // row visibly dims/voids immediately instead of looking unchanged.
+      setShipments((prev) => prev.map((s) => (s.id === orderId ? { ...s, cancelled: true } : s)));
+      showToast(`Cancellation requested for ${orderId}`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Couldn't cancel shipment");
+    } finally {
+      setCancelLoadingId(null);
+    }
+  }
+
   function handleBooked(orderId: string, result: { courier: string; awb: string | number; cost: number }) {
     setShipments((prev) =>
       prev.map((s) => (s.id === orderId ? { ...s, shipStatus: "scheduled", courier: result.courier } : s))
@@ -212,8 +230,10 @@ export default function ShippingDashboard({ initialShipments, mock, bookingEnabl
               onTrack={setTrackId}
               onLabel={handleLabel}
               onScheduleReturn={handleScheduleReturn}
+              onCancel={handleCancel}
               labelLoading={labelLoadingId === s.id}
               returnLoading={returnLoadingId === s.id}
+              cancelLoading={cancelLoadingId === s.id}
             />
           ))}
           {visible.length === 0 && <div className="state-msg">No orders match this filter.</div>}

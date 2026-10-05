@@ -25,6 +25,12 @@ function legValue(val: string): number {
   return parseFloat(val.replace(/[₹,]/g, "")) || 0;
 }
 
+const LEG_BADGE_LABEL: Record<Order["legs"][number]["tag"], string> = {
+  confirmed: "✓ settled",
+  pending: "◐ not settled",
+  estimated: "~ estimated",
+};
+
 export default function OrderCard({ order }: { order: Order }) {
   const [open, setOpen] = useState(false);
   const isCancelled = order.shipCat === "cancelled";
@@ -63,7 +69,7 @@ export default function OrderCard({ order }: { order: Order }) {
         <div>
           {order.legs.map((l, i) => (
             <div className="money-tag" key={i}>
-              <span className={`datebadge ${l.tag}`}>{l.tag === "confirmed" ? "✓ settled" : `~ ${l.tag}`}</span>
+              <span className={`datebadge ${l.tag}`}>{LEG_BADGE_LABEL[l.tag]}</span>
               <span className="money-amt">{l.val}</span>
             </div>
           ))}
