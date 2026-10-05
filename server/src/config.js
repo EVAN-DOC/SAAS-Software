@@ -1,4 +1,5 @@
 require("dotenv").config();
+const onboardingStore = require("./lib/onboardingStore");
 
 function bool(v, fallback) {
   if (v === undefined) return fallback;
@@ -52,7 +53,14 @@ module.exports = {
     // time passes. This is the "service starts from when the client onboarded"
     // cutoff, distinct from orderLookbackDays (which is a rolling window that
     // keeps sliding forward). Takes priority over orderLookbackDays when set.
-    ordersSinceDate: process.env.SHOPIFY_ORDERS_SINCE_DATE || undefined,
+    // Falls back to the date this app's OAuth install actually first
+    // completed (recorded automatically — see lib/onboardingStore.js) when
+    // this isn't set explicitly, so a fresh install just works without
+    // anyone having to hand-calculate and type in today's date. Set this
+    // env var explicitly to override that auto-recorded value, or to make
+    // it durable on a host (like Render's free tier) whose local disk
+    // doesn't survive a redeploy — same reasoning as SHOPIFY_ACCESS_TOKEN.
+    ordersSinceDate: process.env.SHOPIFY_ORDERS_SINCE_DATE || onboardingStore.getOnboardedAt() || undefined,
   },
 
   cashfree: {

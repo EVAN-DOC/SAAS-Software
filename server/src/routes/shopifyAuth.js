@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const axios = require("axios");
 const config = require("../config");
 const tokenStore = require("../lib/tokenStore");
+const onboardingStore = require("../lib/onboardingStore");
 const { invalidate } = require("../lib/cache");
 
 const router = express.Router();
@@ -64,6 +65,7 @@ router.get("/shopify/callback", async (req, res) => {
       code,
     });
     tokenStore.writeToken(tokenRes.data.access_token);
+    onboardingStore.recordOnboardedAtIfUnset();
     invalidate("dashboard");
     res.send(
       `<h2>Shopify connected ✓</h2><p>Scopes granted: ${tokenRes.data.scope}</p><p>You can close this tab and reload the dashboard.</p>`
