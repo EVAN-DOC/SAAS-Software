@@ -137,8 +137,12 @@ header .sub{font-size:12.5px; color:var(--muted); margin-top:3px;}
 .odate .age{color:var(--muted);}
 
 .journey .trk{display:flex; align-items:center; margin-bottom:6px;}
-.journey .trk .d{width:9px; height:9px; border-radius:50%; background:var(--surface); border:2px solid #cfd4db; flex-shrink:0;}
-.journey .trk .ln{height:2px; width:18px; background:#dfe3e8;}
+/* .d and .ln are plain <span>s (default display:inline), which ignore
+   width/height entirely — without inline-block the dots/lines collapse to
+   nothing and every step's wrapper <span> squashes into one thin vertical
+   sliver instead of a spaced-out row. */
+.journey .trk .d{display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--surface); border:2px solid #cfd4db; flex-shrink:0; vertical-align:middle;}
+.journey .trk .ln{display:inline-block; height:2px; width:18px; background:#dfe3e8; vertical-align:middle;}
 .journey .trk .d.done{background:var(--navy); border-color:var(--navy);}
 .journey .trk .ln.done{background:var(--navy);}
 .journey .trk .d.now{background:var(--surface); border-color:var(--navy); box-shadow:0 0 0 3px #e3e6ef;}
