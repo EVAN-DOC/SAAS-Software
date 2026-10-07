@@ -29,7 +29,13 @@ function client() {
     if (error.response?.status !== 429 || !cfg) throw error;
     cfg._retryCount = (cfg._retryCount || 0) + 1;
     if (cfg._retryCount > 5) throw error;
-    const retryAfterSec = Number(error.response.headers["retry-after"]) || 1;
+    // Cap the wait even if Shopify's own Retry-After header is large — an
+    // uncapped wait here, repeated up to 5x, is the confirmed cause of the
+    // whole sync appearing to hang for 10+ minutes: fetchEnrichedOrders only
+    // runs 2 of these workers at once (lib/pMap.js), so one order stuck in
+    // this retry loop blocks that worker from ever reaching the rest of the
+    // queue until the loop gives up.
+    const retryAfterSec = Math.min(Number(error.response.headers["retry-after"]) || 1, 10);
     await new Promise((resolve) => setTimeout(resolve, retryAfterSec * 1000));
     return instance(cfg);
   });

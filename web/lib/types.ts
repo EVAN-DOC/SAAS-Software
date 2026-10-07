@@ -46,6 +46,16 @@ export interface Kpi {
   cls: "green" | "amber" | "red" | "purple";
 }
 
+/** Richer KPI card for the redesigned Orders page — click-to-filter (ids) and an HTML-ish footnote (foot). */
+export interface OrderKpi {
+  key: string;
+  label: string;
+  value: string;
+  foot: string;
+  cls: "green" | "amber" | "red" | "blue" | "muted";
+  ids: string[];
+}
+
 export interface DashboardResponse {
   orders: Order[];
   mock: boolean;

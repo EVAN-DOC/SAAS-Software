@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Sidebar from "./Sidebar";
 import ShipKpiGrid from "./ShipKpiGrid";
 import ShipmentCard from "./ShipmentCard";
@@ -9,10 +9,14 @@ import TrackModal from "./TrackModal";
 import Toast from "./Toast";
 import Pagination from "./Pagination";
 import { Shipment, ShipStatus } from "@/lib/types";
-import { cancelShipment, fetchLabel, scheduleReturnPickup } from "@/lib/api";
+import { cancelShipment, fetchLabel, fetchShippingList, scheduleReturnPickup } from "@/lib/api";
 import { DATE_RANGES, DateRangeKey, isWithinDateRange } from "@/lib/dateRange";
 
 const PAGE_SIZE = 15;
+// Same reasoning as Dashboard.tsx's REFRESH_INTERVAL_MS — the backend's
+// cache now refreshes itself the moment Shopify fires an order webhook, but
+// an already-open tab still needs to poll to actually pick that up.
+const REFRESH_INTERVAL_MS = 30000;
 
 const FILTERS: { key: ShipStatus | "all"; label: string }[] = [
   { key: "all", label: "All Orders" },
@@ -47,6 +51,21 @@ export default function ShippingDashboard({ initialShipments, mock, bookingEnabl
     setToast(msg);
     setTimeout(() => setToast(null), 2600);
   }
+
+  // Mock data never changes and there's nothing live to poll for.
+  useEffect(() => {
+    if (mock) return;
+    const interval = setInterval(() => {
+      fetchShippingList()
+        .then((data) => setShipments(data.shipments))
+        .catch(() => {
+          // Transient failure — keep showing what's already on screen and
+          // just try again on the next tick instead of surfacing an error
+          // for what's a background refresh, not a user action.
+        });
+    }, REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [mock]);
 
   const dateFiltered = useMemo(() => shipments.filter((s) => isWithinDateRange(s.date, dateRange)), [shipments, dateRange]);
 

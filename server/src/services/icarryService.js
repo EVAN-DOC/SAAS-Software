@@ -242,12 +242,21 @@ const NUMERIC_STATUS = {
  * Normalizes iCarry's status (numeric code from SYNC, or string from TRACK)
  * into the dashboard's shipCat buckets: delivered | transit | rto | ndr |
  * unful | cancelled.
+ *
+ * "cancelled" is reserved for a real Shopify order cancellation
+ * (shopifyOrder.cancelled_at — see mapOrder.js) ONLY. A cancelled *shipment*
+ * on iCarry's side is a completely different, much more common event — the
+ * courier voided this particular booking, not the sale — and the order will
+ * typically just get re-booked with the same or a different courier. Confirmed
+ * live: this can happen with no Shopify-side cancellation at all. Treating it
+ * as "unful" (undispatched) is deliberate, not a gap — it's what actually
+ * matches reality and keeps the order bookable again from the Shipping page.
  */
 function mapTrackingStatus(rawStatus) {
   const s = String(NUMERIC_STATUS[rawStatus] ?? rawStatus ?? "").toLowerCase();
   if (s.includes("delivered")) return "delivered";
   if (s.includes("returned to origin") || s.includes("pending return")) return "rto";
-  if (s.includes("cancel") || s === "voided") return "cancelled";
+  if (s.includes("cancel") || s === "voided") return "unful";
   if (s.includes("lost") || s.includes("damaged")) return "rto";
   if (s.includes("transit") || s.includes("shipped") || s.includes("out for delivery")) return "transit";
   if (s.includes("pending pickup") || s.includes("processing") || s.includes("manifested") || s.includes("pickup scheduled")) return "unful";

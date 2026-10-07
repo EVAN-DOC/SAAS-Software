@@ -17,12 +17,14 @@ export default function ScheduleModal({ shipment, bookingEnabled, onClose, onBoo
   const [loading, setLoading] = useState(false);
   const [booking, setBooking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [consigneeName, setConsigneeName] = useState("");
 
   useEffect(() => {
     if (!shipment) return;
     setOptions(null);
     setSelected(null);
     setError(null);
+    setConsigneeName(shipment.customer);
     if (!bookingEnabled) return; // don't spend an estimate call if booking can't complete anyway
     setLoading(true);
     fetchEstimate(shipment.id)
@@ -41,7 +43,7 @@ export default function ScheduleModal({ shipment, bookingEnabled, onClose, onBoo
     setBooking(true);
     setError(null);
     try {
-      const result = await bookShipment(shipment.id, selected.courier_id);
+      const result = await bookShipment(shipment.id, selected.courier_id, consigneeName);
       if (result.error) throw new Error(result.error);
       onBooked(shipment.id, {
         courier: result.courier_name || selected.courier_name,
@@ -80,6 +82,21 @@ export default function ScheduleModal({ shipment, bookingEnabled, onClose, onBoo
 
         {error && <div className="notice-box" style={{ background: "var(--red-bg)", color: "var(--red)" }}>{error}</div>}
 
+        {bookingEnabled && (
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--muted)", marginBottom: 5 }}>
+              Consignee name (sent to the courier — edit if Shopify&apos;s name gets rejected)
+            </label>
+            <input
+              className="search-box"
+              style={{ width: "100%" }}
+              value={consigneeName}
+              onChange={(e) => setConsigneeName(e.target.value)}
+              placeholder="Full name, letters and spaces only"
+            />
+          </div>
+        )}
+
         {bookingEnabled && loading && <div className="modal-sub">Fetching live courier rates…</div>}
 
         {bookingEnabled && options && (
@@ -101,7 +118,7 @@ export default function ScheduleModal({ shipment, bookingEnabled, onClose, onBoo
           </div>
         )}
 
-        <button className="confirm-btn" disabled={!bookingEnabled || !selected || booking} onClick={handleConfirm}>
+        <button className="confirm-btn" disabled={!bookingEnabled || !selected || !consigneeName.trim() || booking} onClick={handleConfirm}>
           {booking ? "Booking…" : "Confirm Booking"}
         </button>
       </div>

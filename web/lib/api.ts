@@ -58,11 +58,11 @@ export async function fetchEstimate(orderId: string): Promise<EstimateResponse> 
 }
 
 /** REAL booking — creates an actual shipment with a courier and spends money. Not a preview. */
-export async function bookShipment(orderId: string, courierId: string): Promise<BookResponse> {
+export async function bookShipment(orderId: string, courierId: string, consigneeName?: string): Promise<BookResponse> {
   const res = await fetch(`${API_BASE_URL}/api/shipments/${encodeURIComponent(orderId)}/book`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ courierId }),
+    body: JSON.stringify({ courierId, consigneeName }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data?.error || `Booking failed (${res.status})`);

@@ -103,7 +103,7 @@ router.post("/:orderId/book", async (req, res, next) => {
         error: "Booking is disabled — set ICARRY_PICKUP_ADDRESS_ID in server/.env to your iCarry pickup address id first.",
       });
     }
-    const { courierId } = req.body;
+    const { courierId, consigneeName } = req.body;
     if (!courierId) return res.status(400).json({ error: "courierId is required (from the /estimate response)" });
 
     const record = await findEnrichedOrder(req.params.orderId);
@@ -122,7 +122,12 @@ router.post("/:orderId/book", async (req, res, next) => {
       clientOrderId: shopifyOrder.name,
       courierId,
       consignee: {
-        name: addr.name || [addr.first_name, addr.last_name].filter(Boolean).join(" "),
+        // iCarry rejects names with special characters (e.g. "D ." from a
+        // shortened Shopify name) with a hard validation error and no way
+        // to fix it inline — consigneeName lets the UI send a manually
+        // corrected name instead of giving up, without touching the real
+        // Shopify address data at all.
+        name: (consigneeName && consigneeName.trim()) || addr.name || [addr.first_name, addr.last_name].filter(Boolean).join(" "),
         mobile: (addr.phone || "").replace(/\D/g, "").slice(-10),
         address: [addr.address1, addr.address2].filter(Boolean).join(", "),
         city: addr.city,
@@ -249,8 +254,9 @@ router.post("/:orderId/return-pickup", async (req, res, next) => {
 // every other action in this file. Doesn't touch the local
 // icarryShipmentMap/icarryAwbMap entries — once iCarry's own TRACK status
 // reflects the cancellation, mapShipment.js's existing isCourierCancelled()
-// check already buckets it into the "Void" treatment automatically, so
-// there's nothing else here that needs updating by hand.
+// check already buckets it into "Not Scheduled" automatically (a cancelled
+// shipment ≠ a cancelled order — see that file), making the order bookable
+// again right away, so there's nothing else here that needs updating by hand.
 router.post("/:orderId/cancel", async (req, res, next) => {
   try {
     const shipmentId = await resolveShipmentId(req.params.orderId);
