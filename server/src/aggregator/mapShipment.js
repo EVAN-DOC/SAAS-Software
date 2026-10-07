@@ -44,11 +44,17 @@ function isManualOrder(shopifyOrder) {
 function orderValueLabel(orderType, shopifyOrder, formatINR) {
   const total = Number(shopifyOrder.current_total_price ?? shopifyOrder.total_price ?? 0);
   if (orderType !== "partial") return formatINR(total);
-  // No reliable advance-amount split without re-fetching Cashfree/transaction
-  // data here (mapOrder.js does that for the finance page) — approximate
-  // using Shopify's own tag/note convention if present, else a flat 25%.
-  const advance = total * 0.25;
-  return `${formatINR(advance)} advance + ${formatINR(total - advance)} COD`;
+  // Shopify's own total_outstanding (already on the order, no extra fetch)
+  // is the real amount still owed — computed by Shopify from the order's
+  // actual payment transactions, not a guess. Confirmed live against order
+  // #1652: total ₹999, total_outstanding ₹950, i.e. a real ₹49 advance —
+  // nothing close to the flat-25% approximation this used to show (which
+  // also fed the wrong collected-amount into real iCarry bookings — see
+  // routes/shipments.js's collectableAmount).
+  const outstanding = Number(shopifyOrder.total_outstanding);
+  const cod = Number.isFinite(outstanding) ? outstanding : total * 0.75;
+  const advance = total - cod;
+  return `${formatINR(advance)} advance + ${formatINR(cod)} COD`;
 }
 
 function shipmentWeightGrams(shopifyOrder) {

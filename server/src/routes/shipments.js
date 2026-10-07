@@ -26,6 +26,29 @@ async function findEnrichedOrder(orderId) {
 }
 
 /**
+ * What the courier should actually collect at delivery — NOT Shopify's full
+ * order total. Confirmed live on a real partial-COD order (#1652, ₹999
+ * total, ₹49 already captured via Cashfree as the upfront advance): booking
+ * with the full ₹999 as the parcel value made iCarry show ₹999 as the
+ * amount collected, ignoring the ₹49 the customer had already paid — the
+ * real remaining COD amount was ₹950.
+ *
+ * Shopify's own total_outstanding field (present on every order fetched via
+ * orders.json, no extra call needed) is the authoritative "amount still
+ * owed" — computed by Shopify itself from every real payment transaction
+ * against the order (captures, partial captures, refunds), not just a
+ * single assumed advance. For a full-COD order (nothing paid yet) this
+ * equals the full total, matching the previous behavior exactly — only
+ * partial-COD orders actually change.
+ */
+function collectableAmount(shopifyOrder, isCod) {
+  const total = Number(shopifyOrder.current_total_price ?? shopifyOrder.total_price ?? 0);
+  if (!isCod) return total;
+  const outstanding = Number(shopifyOrder.total_outstanding);
+  return Number.isFinite(outstanding) ? outstanding : total;
+}
+
+/**
  * Same priority order as enrichOrders.js: Shopify's icarry.shipment_id
  * metafield first (durable — survives a redeploy, unlike the local file),
  * falling back to the local .data map. The /label, /return-pickup, and
@@ -75,7 +98,6 @@ router.post("/:orderId/estimate", async (req, res, next) => {
     if (!destinationPincode) return res.status(400).json({ error: "Order has no shipping pincode" });
 
     const weightGrams = (shopifyOrder.line_items || []).reduce((s, li) => s + (Number(li.grams) || 0) * (li.quantity || 1), 0) || 500;
-    const isPartial = shopifyOrder.financial_status === "partially_paid";
     const isCod = shopifyOrder.financial_status !== "paid";
 
     const result = await icarryService.getEstimate({
@@ -85,8 +107,8 @@ router.post("/:orderId/estimate", async (req, res, next) => {
       weightGrams,
       originPincode: config.icarry.originPincode,
       destinationPincode,
-      shipmentType: isPartial || isCod ? "C" : "P",
-      shipmentValue: Number(shopifyOrder.current_total_price ?? shopifyOrder.total_price ?? 0),
+      shipmentType: isCod ? "C" : "P",
+      shipmentValue: collectableAmount(shopifyOrder, isCod),
     });
     res.json(result);
   } catch (err) {
@@ -113,7 +135,6 @@ router.post("/:orderId/book", async (req, res, next) => {
     if (!addr) return res.status(400).json({ error: "Order has no shipping address" });
 
     const isCod = shopifyOrder.financial_status !== "paid";
-    const total = Number(shopifyOrder.current_total_price ?? shopifyOrder.total_price ?? 0);
     const weightGrams = (shopifyOrder.line_items || []).reduce((s, li) => s + (Number(li.grams) || 0) * (li.quantity || 1), 0) || 500;
     const contents = (shopifyOrder.line_items || []).map((li) => li.title).join(", ").slice(0, 255) || "Merchandise";
 
@@ -137,7 +158,7 @@ router.post("/:orderId/book", async (req, res, next) => {
       },
       parcel: {
         type: isCod ? "COD" : "Prepaid",
-        value: total,
+        value: collectableAmount(shopifyOrder, isCod),
         currency: "INR",
         contents,
         dimensions: { length: 15, breadth: 12, height: 5, unit: "cm" },
