@@ -92,8 +92,21 @@ async function cached(key, fn) {
   return refresh(key, fn);
 }
 
+// Marks the entry stale instead of deleting it outright. Deleting it used to
+// mean every booking/label/cancel action (and now every Shopify order
+// webhook) would wipe the in-memory value entirely — and since diskChecked
+// only ever consults disk once per key per process lifetime, nothing could
+// repopulate it afterwards. The visible symptom: isWarm() started reporting
+// "cold" right after any of those actions, which is what made the
+// "Syncing your store…" screen reappear on the Orders page after cancelling
+// a shipment, and cached() fell into a fully blocking resync instead of the
+// stale-while-revalidate background refresh this module's own doc comment
+// promises. Setting `at` to 0 keeps the last-known-good value available
+// (so isWarm() and cached()'s synchronous return both still work) while
+// still forcing the very next cached() call to kick off a fresh refresh.
 function invalidate(key) {
-  store.delete(key);
+  const hit = store.get(key);
+  if (hit) hit.at = 0;
 }
 
 /** True once `key` has a cached value (memory or disk), however stale — lets callers tell "still warming up for the first time" apart from "actually failed". */
